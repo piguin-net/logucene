@@ -1,0 +1,11 @@
+{
+    "image": "maven",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "vscjava.vscode-java-pack"
+            ]
+        }
+    },
+    "forwardPorts": [1514, 8080]
+}

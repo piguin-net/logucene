@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>logucene</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <style>
+      body {
+        margin: 0;
+      }
+      #app {
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+      .p-datatable{
+        height: calc(100% - 42px - 58px - 1px);
+      }
+      .p-datatable-table-container,.p-datatable-table,.p-datatable-tbody {
+        height: 100%;
+      }
+      .p-datatable-tbody > tr > td {
+        white-space: nowrap;
+      }
+    </style>
+    <link href="https://cdn.jsdelivr.net/npm/primeicons@7.0.0/primeicons.min.css" rel="stylesheet">
+  </head>
+  <body>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/primevue/umd/primevue.min.js"></script>
+    <script src="https://unpkg.com/@primevue/themes/umd/aura.min.js"></script>
+
+    <div id="app">
+    </div>
+
+    <script>
+      const { createApp, ref, h } = Vue;
+      const {
+        Button,
+        Column,
+        ColumnGroup,
+        Config,
+        DataTable,
+        Dialog,
+        InputText,
+        PickList,
+        Row,
+        Themes,
+        Toast,
+        ToastService,
+        useToast, 
+      } = PrimeVue;
+
+      const root = {
+        template: `
+          <Toast position="bottom-right" />
+          <form style="display: flex;" @submit="search(); $event.preventDefault();">
+            <InputText type="text" v-model="query" style="width: 100%" placeholder="Query" />
+            <Button severity="success" icon="pi pi-search" @click="search" label="Search" />
+            <Button severity="info" icon="pi pi-download" @click="download" />
+            <Button severity="help" icon="pi pi-cog" @click="showDialog = true" />
+          </form>
+          <DataTable
+            ref="table"
+            showGridlines
+            scrollable
+            paginator
+            :lazy="true"
+            :totalRecords="total"
+            :rows="rows"
+            :rowsPerPageOptions="[100, 300, 500, 1000]"
+            :value="logs"
+            scrollHeight="100%"
+            :virtualScrollerOptions="{ itemSize: 49 }"
+            @page="pageChange"
+          >
+            <Column
+              v-for="field in fields[0]"
+              :field="field.name"
+              :header="field.name"
+              :headerStyle="{'background-color': 'lightgray'}"
+            ></Column>
+          </DataTable>
+          <Dialog v-model:visible="showDialog" modal header="Config">
+            <PickList v-model="fields" dataKey="name">
+              <template v-slot:sourceheader>
+                <label style="font-weight: bold;">Show</label>
+              </template>
+              <template v-slot:targetheader>
+                <label style="font-weight: bold;">Hidden</label>
+              </template>
+              <template #option="{ option  }">
+                <label style="width: 100px;">{{ option.name }}</label>
+              </template>
+            </PickList>
+          </Dialog>
+        `,
+        data: function() {
+          return {
+            query: '*:*',
+            fields: [[
+              {name: 'day'},
+              {name: 'time'},
+              {name: 'addr'},
+              {name: 'facility'},
+              {name: 'severity'},
+              {name: 'message'},
+            ], [
+              {name: 'id'},
+              {name: 'timestamp'},
+            ]],
+            uuid: null,
+            logs: [],
+            total: 0,
+            rows: 100,
+            toast: useToast(),
+            showDialog: false,
+          };
+        },
+        mounted: function() {
+          this.search();
+        },
+        methods: {
+          search: function(event) {
+            this.$data.uuid = null;
+            this.$data.logs = [];
+            this.$data.total = 0;
+            fetch(
+              `/api/search?query=${this.$data.query}`
+            ).then(response => {
+              if (response.ok) {
+                response.json().then(json => {
+                  this.$data.uuid  = json.uuid;
+                  this.$data.total = json.total;
+                  this.pageChange({first: 0, rows: this.$data.rows});
+                  if (this.$data.total > 0) {
+                    this.$data.toast.add({
+                      severity: 'info',
+                      summary: `${this.$data.total.toLocaleString()} hits.`,
+                      life: 5000,
+                    });
+                  } else {
+                    this.$data.toast.add({
+                      severity: 'warn',
+                      summary: `not found.`,
+                      life: 5000,
+                    });
+                  }
+                });
+              } else {
+                response.json().then(json => {
+                  this.$data.toast.add({
+                    severity: 'error',
+                    summary: response.statusText,
+                    detail: json.message,
+                  });
+                });
+              }
+            }).catch(e => {
+              this.$data.toast.add({
+                severity: 'error',
+                summary: e,
+              });
+            });
+          },
+          pageChange: function(event) {
+            this.$data.rows = event.rows;
+            fetch(
+              `/api/documents`
+              + `?uuid=${this.$data.uuid}`
+              + `&first=${event.first}`
+              + `&last=${event.first + event.rows}`
+            ).then(response => {
+              if (response.ok) {
+                response.json().then(json => {
+                  this.$data.logs = json;
+                });
+              } else {
+                response.json().then(json => {
+                  this.$data.toast.add({
+                    severity: 'error',
+                    summary: response.statusText,
+                    detail: json.message,
+                  });
+                });
+              }
+            }).catch(e => {
+              this.$data.toast.add({
+                severity: 'error',
+                summary: e,
+              });
+            });
+          },
+          download: function() {
+            var a = document.createElement('a');
+            a.target = '_blank';
+            a.href = `/api/download?uuid=${this.$data.uuid}`;
+            a.click();
+          },
+        }
+      };
+
+      const app = createApp(root);
+
+      app.use(Config, {
+        theme: {
+          preset: Themes.Aura
+        }
+      }).use(ToastService);
+
+      app.component('Button', Button);
+      app.component('Column', Column);
+      app.component('ColumnGroup', ColumnGroup);
+      app.component('DataTable', DataTable);
+      app.component('Dialog', Dialog);
+      app.component('InputText', InputText);
+      app.component('PickList', PickList);
+      app.component('Row', Row);
+      app.component('Toast', Toast);
+
+      const proxy = app.mount('#app');
+    </script>
+  </body>
+</html>
