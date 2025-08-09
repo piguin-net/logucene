@@ -43,7 +43,7 @@ public class LuceneManager implements Closeable {
     public LuceneManager(String path) throws IOException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException, ClassNotFoundException {
         this.dir = FSDirectory.open(Paths.get(path));
 
-        String clazz = System.getProperty("analyzer", "org.apache.lucene.analysis.standard.StandardAnalyzer");
+        String clazz = System.getProperty("lucene.analyzer", "org.apache.lucene.analysis.standard.StandardAnalyzer");
         this.analyzer = (Analyzer) Class.forName(clazz).getDeclaredConstructor().newInstance();
 
         IndexWriterConfig iwc = new IndexWriterConfig(this.analyzer);
