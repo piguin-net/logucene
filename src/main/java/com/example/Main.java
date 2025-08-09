@@ -25,11 +25,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.example.LuceneManager.LuceneFieldKeys;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.javalin.Javalin;
 import io.javalin.http.Context;
 import io.javalin.http.HttpStatus;
 import io.javalin.http.staticfiles.Location;
+import io.javalin.websocket.WsConnectContext;
 
 /**
  * Hello world!
@@ -38,10 +40,12 @@ public class Main
 {
     private static Logger logger = LoggerFactory.getLogger(Main.class);
 
+    private static ObjectMapper mapper = new ObjectMapper();
     private static LuceneManager lucene;
     private static SyslogReceiver watcher;
     private static Thread worker;
     private static Map<UUID, List<Integer>> cache = new HashMap<>();  // TODO: メモリリーク
+    private static Map<Integer, WsConnectContext> connections = new HashMap<>();
 
     public static class SearchResult {
         public UUID uuid = UUID.randomUUID();
@@ -53,6 +57,24 @@ public class Main
         try {
             lucene = new LuceneManager(System.getProperty("lucene.index", "index"));
             watcher = new SyslogReceiver(Integer.getInteger("syslog.port", 1514), lucene);
+            watcher.setEventListener(doc -> {
+                try {
+                    List<Integer> deleteTargets = new ArrayList<>();
+                    String json = mapper.writeValueAsString(convert(doc));
+                    for (Map.Entry<Integer, WsConnectContext> connection: connections.entrySet()) {
+                        if (!connection.getValue().session.isOpen()) {
+                            deleteTargets.add(connection.getValue().session.hashCode());
+                        } else {
+                            connection.getValue().send(json);
+                        }
+                    }
+                    for (Integer target: deleteTargets) {
+                        connections.remove(target);
+                    }
+                } catch (Exception e) {
+                    logger.atError().log("ws send error.");
+                }
+            });
             worker = new Thread(watcher);
             worker.start();
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -83,8 +105,29 @@ public class Main
             "/api/download", Main::download
         ).before(
             ctx -> logger.atInfo().log(ctx.fullUrl())
-        );
+        ).ws("/ws/realtime", ws -> {
+            ws.onConnect(ctx -> {
+                logger.atInfo().addKeyValue("addr", ctx.host()).log("ws connected.");
+                ctx.enableAutomaticPings();
+                connections.put(ctx.session.hashCode(), ctx);
+            });
+            ws.onClose(ctx -> {
+                logger.atInfo().addKeyValue("addr", ctx.host()).log("ws closed.");
+                connections.remove(ctx.session.hashCode());
+            });
+            ws.onError(ctx -> {
+                logger.atError().addKeyValue("addr", ctx.host()).log("ws error.");
+            });
+        });
         server.start(Integer.getInteger("web.port", 8080));
+    }
+
+    private static Map<String, Object> convert(Document doc) {
+        return new HashMap<>() {{
+            for (IndexableField field: doc.getFields()) {
+                this.put(field.name(), doc.get(field.name()));
+            }
+        }};
     }
 
     private static void search(Context ctx) {
@@ -131,12 +174,8 @@ public class Main
             );
             List<Map.Entry<Integer,Document>> docs = lucene.documents(ids);
             List<Map<String, Object>> result = docs.stream().map(doc -> {
-                Map<String, Object> dict = new HashMap<>() {{
-                    this.put("id", doc.getKey());
-                    for (IndexableField field: doc.getValue().getFields()) {
-                        this.put(field.name(), doc.getValue().get(field.name()));
-                    }
-                }};
+                Map<String, Object> dict = convert(doc.getValue());
+                dict.put("id", doc.getKey());
                 return dict;
             }).collect(Collectors.toList());
             ctx.json(result);

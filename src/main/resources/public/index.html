@@ -48,6 +48,7 @@
         Themes,
         Toast,
         ToastService,
+        ToggleSwitch,
         useToast, 
       } = PrimeVue;
 
@@ -55,9 +56,13 @@
         template: `
           <Toast position="bottom-right" />
           <form style="display: flex;" @submit="search(); $event.preventDefault();">
-            <InputText type="text" v-model="query" style="width: 100%" placeholder="Query" />
-            <Button severity="success" icon="pi pi-search" @click="search" label="Search" />
-            <Button severity="info" icon="pi pi-download" @click="download" />
+            <div style="display: flex; align-items: center; padding: 8px;">
+              <ToggleSwitch v-model="realtime" @change="switchRealTimeMode" />
+              <label>RealTimeMode</label>
+            </div>
+            <InputText type="text" v-model="query" :disabled="realtime" style="width: 100%" placeholder="Query" />
+            <Button severity="success" icon="pi pi-search" :disabled="realtime" @click="search" label="Search" />
+            <Button severity="info" icon="pi pi-download" :disabled="realtime" @click="download" />
             <Button severity="help" icon="pi pi-cog" @click="showDialog = true" />
           </form>
           <DataTable
@@ -115,6 +120,8 @@
             rows: 100,
             toast: useToast(),
             showDialog: false,
+            socket: null,
+            realtime: false,
           };
         },
         mounted: function() {
@@ -197,6 +204,20 @@
             a.href = `/api/download?uuid=${this.$data.uuid}`;
             a.click();
           },
+          switchRealTimeMode() {
+            this.$data.uuid = null;
+            this.$data.logs = [];
+            this.$data.total = 0;
+            if (this.$data.realtime) {
+              this.$data.socket = new WebSocket("/ws/realtime");
+              this.$data.socket.addEventListener("message", event => {
+                this.$data.logs = [JSON.parse(event.data)].concat(this.$data.logs);
+              });
+            } else {
+              this.$data.socket.close();
+              this.$data.socket = null;
+            }
+          }
         }
       };
 
@@ -208,15 +229,21 @@
         }
       }).use(ToastService);
 
-      app.component('Button', Button);
-      app.component('Column', Column);
-      app.component('ColumnGroup', ColumnGroup);
-      app.component('DataTable', DataTable);
-      app.component('Dialog', Dialog);
-      app.component('InputText', InputText);
-      app.component('PickList', PickList);
-      app.component('Row', Row);
-      app.component('Toast', Toast);
+      const components = [
+        Button,
+        Column,
+        ColumnGroup,
+        DataTable,
+        Dialog,
+        InputText,
+        PickList,
+        Row,
+        Toast,
+        ToggleSwitch,
+      ];
+      for (var component of components) {
+        app.component(component.name, component);
+      }
 
       const proxy = app.mount('#app');
     </script>
