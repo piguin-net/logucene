@@ -85,6 +85,7 @@
               :header="field.name"
               :headerStyle="{'background-color': 'lightgray'}"
             ></Column>
+            <template #empty> no data. </template>
           </DataTable>
           <Dialog v-model:visible="showDialog" modal header="Config">
             <PickList v-model="fields" dataKey="name">
@@ -144,7 +145,7 @@
                   if (this.$data.total > 0) {
                     this.$data.toast.add({
                       severity: 'info',
-                      summary: `${this.$data.total.toLocaleString()} hits.`,
+                      summary: `${this.$data.total.toLocaleString()} hits.(${json.ms.toLocaleString()}ms)`,
                       life: 5000,
                     });
                   } else {

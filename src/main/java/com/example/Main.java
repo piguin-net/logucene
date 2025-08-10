@@ -3,6 +3,7 @@ package com.example;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.text.DecimalFormat;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -53,6 +54,7 @@ public class Main
         public UUID uuid = UUID.randomUUID();
         public long total = 0;
         public List<Integer> ids = new ArrayList<>();
+        public long ms = 0;
     }
 
     static {
@@ -133,6 +135,7 @@ public class Main
     }
 
     private static void search(Context ctx) {
+        long start = ZonedDateTime.now().toInstant().toEpochMilli();
         SearchResult result = new SearchResult();
         try {
             String query = ctx.queryParam("query");
@@ -163,11 +166,14 @@ public class Main
             ).collect(
                 Collectors.toList()
             );
+            long end = ZonedDateTime.now().toInstant().toEpochMilli();
+            result.ms = end - start;
             cache.put(result.uuid, result.ids);
             ctx.json(result);
         } catch (IndexNotFoundException e) {
             logger.atWarn().log("index not found.");
             cache.put(result.uuid, new ArrayList<>());
+            ctx.json(result);
         } catch (Exception e) {
             ctx.status(HttpStatus.INTERNAL_SERVER_ERROR).json(e);
         }
