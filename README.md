@@ -14,8 +14,8 @@ java \
   -Dsyslog.port=1514 \
   -Dweb.port=8080 \
   -Dlucene.index=index \
+  -Dlucene.analyzer=org.apache.lucene.analysis.standard.StandardAnalyzer \
   -Duser.timezone=Asia/Tokyo \
-  -Danalyzer=org.apache.lucene.analysis.standard.StandardAnalyzer \
   -jar target/logucene-1.0-SNAPSHOT-jar-with-dependencies.jar
 ```
 | Key             | Value                                  |
