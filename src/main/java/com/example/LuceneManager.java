@@ -17,7 +17,9 @@ import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.IndexWriterConfig.OpenMode;
 import org.apache.lucene.index.StoredFields;
 import org.apache.lucene.queryparser.classic.ParseException;
-import org.apache.lucene.queryparser.classic.QueryParser;
+import org.apache.lucene.queryparser.flexible.core.QueryNodeException;
+import org.apache.lucene.queryparser.flexible.standard.StandardQueryParser;
+import org.apache.lucene.queryparser.flexible.standard.config.PointsConfig;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.TopDocs;
@@ -57,11 +59,12 @@ public class LuceneManager implements Closeable {
         this.writer.commit();
     }
 
-    public TopDocs search(String field, String query, Sort order) throws ParseException, IOException {
+    public TopDocs search(String field, String query, Sort order, Map<String, PointsConfig> pointsConfig) throws ParseException, IOException, QueryNodeException {
         try (DirectoryReader reader = DirectoryReader.open(dir);) {
             IndexSearcher searcher = new IndexSearcher(reader);
-            QueryParser parser = new QueryParser(field, this.analyzer);
-            return searcher.search(parser.parse(query), Integer.MAX_VALUE, order);
+            StandardQueryParser parser = new StandardQueryParser(this.analyzer);
+            parser.setPointsConfigMap(pointsConfig);
+            return searcher.search(parser.parse(query, field), Integer.MAX_VALUE, order);
         }
     }
 

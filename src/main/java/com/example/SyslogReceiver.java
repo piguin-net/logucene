@@ -12,6 +12,7 @@ import java.util.function.Function;
 
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
+import org.apache.lucene.document.IntField;
 import org.apache.lucene.document.KeywordField;
 import org.apache.lucene.document.LongField;
 import org.apache.lucene.document.TextField;
@@ -177,9 +178,9 @@ public class SyslogReceiver implements Runnable {
             host,
             Field.Store.YES
         ));
-        doc.add(new KeywordField(
+        doc.add(new IntField(
             LuceneFieldKeys.port.name(),
-            String.valueOf(port),
+            port,
             Field.Store.YES
         ));
         Integer priority = this.getPriority(message);

@@ -2,6 +2,7 @@ package com.example;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -13,6 +14,7 @@ import java.util.stream.Collectors;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.IndexNotFoundException;
 import org.apache.lucene.index.IndexableField;
+import org.apache.lucene.queryparser.flexible.standard.config.PointsConfig;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.SortedNumericSortField;
@@ -141,7 +143,17 @@ public class Main
                     LuceneFieldKeys.timestamp.name(),
                     SortField.Type.LONG,
                     true
-                ))
+                )),
+                new HashMap<>() {{
+                    this.put(
+                        LuceneFieldKeys.timestamp.name(),
+                        new PointsConfig(new DecimalFormat(), Long.class)
+                    );
+                    this.put(
+                        LuceneFieldKeys.port.name(),
+                        new PointsConfig(new DecimalFormat(), Integer.class)
+                    );
+                }}
             );
             result.total = hits.totalHits.value();
             result.ids = Arrays.asList(
