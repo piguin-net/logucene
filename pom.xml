@@ -73,6 +73,13 @@
       <artifactId>poi-ooxml</artifactId>
       <version>5.4.1</version>
     </dependency>
+    <!-- https://mvnrepository.com/artifact/org.apache.groovy/groovy-all -->
+    <dependency>
+      <groupId>org.apache.groovy</groupId>
+      <artifactId>groovy-all</artifactId>
+      <version>4.0.28</version>
+      <type>pom</type>
+    </dependency>
   </dependencies>
 
   <build>

@@ -1,7 +1,11 @@
 package com.example;
 
+import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.text.DecimalFormat;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
@@ -11,6 +15,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
+
+import javax.script.ScriptEngine;
+import javax.script.ScriptEngineManager;
 
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.IndexNotFoundException;
@@ -49,6 +56,9 @@ public class Main
     private static Thread worker;
     private static Map<UUID, List<Integer>> cache = new HashMap<>();  // TODO: メモリリーク
     private static Map<Integer, WsConnectContext> connections = new HashMap<>();
+    private static String script = System.getProperty("syslog.listener", null);
+    private static ScriptEngineManager manager = new ScriptEngineManager();
+    private static ScriptEngine engine = manager.getEngineByName("groovy");
 
     public static class SearchResult {
         public UUID uuid = UUID.randomUUID();
@@ -61,7 +71,7 @@ public class Main
         try {
             lucene = new LuceneManager(System.getProperty("lucene.index", "index"));
             watcher = new SyslogReceiver(Integer.getInteger("syslog.port", 1514), lucene);
-            watcher.setEventListener(doc -> {
+            watcher.addEventListener(doc -> {
                 try {
                     List<Integer> deleteTargets = new ArrayList<>();
                     String json = mapper.writeValueAsString(convert(doc));
@@ -76,7 +86,19 @@ public class Main
                         connections.remove(target);
                     }
                 } catch (Exception e) {
-                    logger.atError().log("ws send error.");
+                    logger.atError().log("ws send error.", e);
+                }
+            });
+            watcher.addEventListener(doc -> {
+                if (script != null) {
+                    try (InputStream input = new FileInputStream(script);) {
+                        BufferedReader reader = new BufferedReader(new InputStreamReader(input));
+                        String source = reader.lines().collect(Collectors.joining("\n"));
+                        engine.put("doc", doc);
+                        engine.eval(source);
+                    } catch (Exception e) {
+                        logger.atError().log("script eval error.", e);
+                    }
                 }
             });
             worker = new Thread(watcher);

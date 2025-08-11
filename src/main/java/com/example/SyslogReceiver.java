@@ -7,6 +7,8 @@ import java.net.SocketException;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -100,7 +102,7 @@ public class SyslogReceiver implements Runnable {
     private final LuceneManager lucene;
     private final DatagramSocket socket;
     private boolean active = true;
-    private Consumer<Document> onReceive;
+    private List<Consumer<Document>> onReceive = new ArrayList<>();
 
     public SyslogReceiver(int port, LuceneManager lucene) throws SocketException {
         this.port = port;
@@ -113,8 +115,8 @@ public class SyslogReceiver implements Runnable {
         this.socket.close();
     }
 
-    public void setEventListener(Consumer<Document> onReceive) {
-        this.onReceive = onReceive;
+    public void addEventListener(Consumer<Document> onReceive) {
+        this.onReceive.add(onReceive);
     }
 
     @Override
@@ -149,7 +151,9 @@ public class SyslogReceiver implements Runnable {
                             message
                         );
                         lucene.add(doc);
-                        if (this.onReceive != null) onReceive.accept(doc);
+                        for (Consumer<Document> listener: this.onReceive) {
+                            listener.accept(doc);
+                        }
                         log.apply(logger.atDebug()).log();
                     } catch (IOException e) {
                         log.apply(logger.atError()).log();

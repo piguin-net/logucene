@@ -21,7 +21,7 @@ sudo docker run --rm \
   -p 1514:1514/udp \
   -p 8080:8080 \
   openjdk:21 \
-  java -jar logucene-1.0-SNAPSHOT-jar-with-dependencies.jar
+  java -Duser.timezone=Asia/Tokyo -jar logucene-1.0-SNAPSHOT-jar-with-dependencies.jar
 ```
 
 # オプション
@@ -32,12 +32,14 @@ java \
   -Dlucene.index=index \
   -Dlucene.analyzer=org.apache.lucene.analysis.standard.StandardAnalyzer \
   -Duser.timezone=Asia/Tokyo \
+  -Dsyslog.listener=/path/to/script.groovy \
   -jar target/logucene-1.0-SNAPSHOT-jar-with-dependencies.jar
 ```
-| Key             | Value                                  |
-| --------------- | -------------------------------------- |
-| syslog.port     | syslogの受信ポート(UDP)                |
-| web.port        | webサーバの待受ポート                  |
-| lucene.index    | luceneの保存先ディレクトリ             |
-| lucene.analyzer | 全文検索に使用するアナライザ           |
-| user.timezone   | ログ受信日時を保存する際のタイムゾーン |
+| Key             | Value                                                | Default                                              |
+| --------------- | --------------------------------------------         | ---------------------------------------------------- |
+| syslog.port     | syslogの受信ポート(UDP)                              | 1514                                                 |
+| web.port        | webサーバの待受ポート                                | 8080                                                 |
+| lucene.index    | luceneの保存先ディレクトリ                           | index                                                |
+| lucene.analyzer | 全文検索に使用するアナライザ                         | org.apache.lucene.analysis.standard.StandardAnalyzer |
+| user.timezone   | ログ受信日時を保存する際のタイムゾーン               | Asia/Tokyo                                           |
+| syslog.listener | ログ受信時に実行したいGroovyスクリプトのファイルパス | (無し)                                               |
