@@ -1,14 +1,18 @@
 package com.example;
 
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.SocketException;
+import java.text.DecimalFormat;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -18,15 +22,61 @@ import org.apache.lucene.document.IntField;
 import org.apache.lucene.document.KeywordField;
 import org.apache.lucene.document.LongField;
 import org.apache.lucene.document.TextField;
+import org.apache.lucene.queryparser.flexible.standard.config.PointsConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.spi.LoggingEventBuilder;
 
-import com.example.LuceneManager.LuceneFieldKeys;
-
 public class SyslogReceiver implements Runnable {
 
     private Logger logger = LoggerFactory.getLogger(this.getClass());
+
+    public static enum LuceneFieldKeys {
+        timestamp(LongField.class, long.class, new PointsConfig(new DecimalFormat(), Long.class)),
+        day(KeywordField.class, String.class),
+        time(KeywordField.class, String.class),
+        addr(KeywordField.class, String.class),
+        port(IntField.class, int.class, new PointsConfig(new DecimalFormat(), Integer.class)),
+        facility(KeywordField.class, String.class),
+        severity(KeywordField.class, String.class),
+        message(TextField.class, String.class);
+
+        private Class<? extends Field> fieldClazz;
+        private Class<?> valueClazz;
+        private PointsConfig pointsConfig;
+
+        <T extends Field> LuceneFieldKeys(Class<T> fieldClazz, Class<?> valueClazz) {
+            this(fieldClazz, valueClazz, null);
+        }
+
+        <T extends Field> LuceneFieldKeys(Class<T> fieldClazz, Class<?> valueClazz, PointsConfig pointsConfig) {
+            this.fieldClazz = fieldClazz;
+            this.valueClazz = valueClazz;
+            this.pointsConfig = pointsConfig;
+        }
+
+        public <T> Field field(T value) throws InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException {
+            return this.fieldClazz.getDeclaredConstructor(
+                String.class,
+                this.valueClazz,
+                Field.Store.class
+            ).newInstance(
+                this.name(),
+                value,
+                Field.Store.YES
+            );
+        }
+
+        public static Map<String, PointsConfig> getPointsConfig() {
+            return new HashMap<>() {{
+                for (LuceneFieldKeys field: LuceneFieldKeys.values()) {
+                    if (field.pointsConfig != null) {
+                        this.put(field.name(), field.pointsConfig);
+                    }
+                }
+            }};
+        }
+    };
 
     public static enum Facility {
         unknown(-1),
@@ -175,54 +225,22 @@ public class SyslogReceiver implements Runnable {
         if (!this.socket.isClosed()) this.socket.close();
     }
 
-    private Document parse(String host, int port, String message) {
+    private Document parse(String host, int port, String message) throws InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException {
         Document doc = new Document();
-        doc.add(new KeywordField(
-            LuceneFieldKeys.addr.name(),
-            host,
-            Field.Store.YES
-        ));
-        doc.add(new IntField(
-            LuceneFieldKeys.port.name(),
-            port,
-            Field.Store.YES
-        ));
+        doc.add(LuceneFieldKeys.addr.field(host));
+        doc.add(LuceneFieldKeys.port.field(port));
         Integer priority = this.getPriority(message);
         if (priority != null) {
-            doc.add(new KeywordField(
-                LuceneFieldKeys.facility.name(),
-                Facility.of(priority / 8).name(),
-                Field.Store.YES
-            ));
-            doc.add(new KeywordField(
-                LuceneFieldKeys.severity.name(),
-                Severity.of(priority % 8).name(),
-                Field.Store.YES
-            ));
+            doc.add(LuceneFieldKeys.facility.field(Facility.of(priority / 8).name()));
+            doc.add(LuceneFieldKeys.severity.field(Severity.of(priority % 8).name()));
         }
         ZonedDateTime date = ZonedDateTime.now(
             ZoneId.of(System.getProperty("user.timezone"))
         );
-        doc.add(new LongField(
-            LuceneFieldKeys.timestamp.name(),
-            date.toInstant().toEpochMilli(),
-            Field.Store.YES
-        ));
-        doc.add(new KeywordField(
-            LuceneFieldKeys.day.name(),
-            date.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")),
-            Field.Store.YES
-        ));
-        doc.add(new KeywordField(
-            LuceneFieldKeys.time.name(),
-            date.format(DateTimeFormatter.ofPattern("HH:mm:ss")),
-            Field.Store.YES
-        ));
-        doc.add(new TextField(
-            LuceneFieldKeys.message.name(),
-            message,
-            Field.Store.YES
-        ));
+        doc.add(LuceneFieldKeys.timestamp.field(date.toInstant().toEpochMilli()));
+        doc.add(LuceneFieldKeys.day.field(date.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))));
+        doc.add(LuceneFieldKeys.time.field(date.format(DateTimeFormatter.ofPattern("HH:mm:ss"))));
+        doc.add(LuceneFieldKeys.message.field(message));
         return doc;
     }
 

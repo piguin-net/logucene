@@ -27,17 +27,6 @@ import org.apache.lucene.store.FSDirectory;
 
 public class LuceneManager implements Closeable {
 
-    public static enum LuceneFieldKeys {
-        timestamp,
-        day,
-        time,
-        addr,
-        port,
-        facility,
-        severity,
-        message;
-    };
-
     private FSDirectory dir;
     private IndexWriter writer;
     private Analyzer analyzer;

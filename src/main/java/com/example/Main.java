@@ -6,7 +6,6 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.text.DecimalFormat;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -22,7 +21,6 @@ import javax.script.ScriptEngineManager;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.IndexNotFoundException;
 import org.apache.lucene.index.IndexableField;
-import org.apache.lucene.queryparser.flexible.standard.config.PointsConfig;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.SortedNumericSortField;
@@ -34,7 +32,7 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.example.LuceneManager.LuceneFieldKeys;
+import com.example.SyslogReceiver.LuceneFieldKeys;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.javalin.Javalin;
@@ -169,16 +167,7 @@ public class Main
                     SortField.Type.LONG,
                     true
                 )),
-                new HashMap<>() {{
-                    this.put(
-                        LuceneFieldKeys.timestamp.name(),
-                        new PointsConfig(new DecimalFormat(), Long.class)
-                    );
-                    this.put(
-                        LuceneFieldKeys.port.name(),
-                        new PointsConfig(new DecimalFormat(), Integer.class)
-                    );
-                }}
+                LuceneFieldKeys.getPointsConfig()
             );
             result.total = hits.totalHits.value();
             result.ids = Arrays.asList(
