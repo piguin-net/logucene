@@ -31,6 +31,7 @@ java \
   -Dweb.port=8080 \
   -Dlucene.index=index \
   -Dlucene.analyzer=org.apache.lucene.analysis.standard.StandardAnalyzer \
+  -Dsqlite.analyzer=org.apache.lucene.analysis.standard.StandardAnalyzer \
   -Duser.timezone=Asia/Tokyo \
   -Dsyslog.timezone=Asia/Tokyo \
   -Dsyslog.timezone[127.0.0.1]=Asia/Tokyo \
@@ -42,7 +43,8 @@ java \
 | syslog.port                       | syslogの受信ポート(UDP)                                                           | 1514                                                 |
 | web.port                          | webサーバの待受ポート                                                             | 8080                                                 |
 | lucene.index                      | luceneの保存先ディレクトリ                                                        | index                                                |
-| lucene.analyzer                   | 全文検索に使用するアナライザ                                                      | org.apache.lucene.analysis.standard.StandardAnalyzer |
+| lucene.analyzer                   | luceneの全文検索に使用するアナライザ                                              | org.apache.lucene.analysis.standard.StandardAnalyzer |
+| sqlite.analyzer                   | SQLiteファイルダウンロード時に使用するアナライザ(トークナイザ)                    | org.apache.lucene.analysis.standard.StandardAnalyzer |
 | user.timezone                     | ブラウザで日時を表示する際に使用するタイムゾーン                                  | システムのタイムゾーン                               |
 | syslog.timezone                   | RFC3164フォーマットのログに含まれる日時をパースする際に使用するタイムゾーン(共通) | システムのタイムゾーン                               |
 | syslog.timezone[送信元IPアドレス] | RFC3164フォーマットのログに含まれる日時をパースする際に使用するタイムゾーン(個別) | システムのタイムゾーン                               |
