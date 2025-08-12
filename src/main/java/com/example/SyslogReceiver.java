@@ -39,7 +39,7 @@ public class SyslogReceiver implements Runnable {
         timestamp(LongField.class, long.class, new PointsConfig(new DecimalFormat(), Long.class)),
         day(KeywordField.class, String.class),
         time(KeywordField.class, String.class),
-        host(KeywordField.class, String.class),
+        host(TextField.class, String.class),
         addr(KeywordField.class, String.class),
         port(IntField.class, int.class, new PointsConfig(new DecimalFormat(), Integer.class)),
         facility(KeywordField.class, String.class),
