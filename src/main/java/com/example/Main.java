@@ -2,10 +2,17 @@ package com.example;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.lang.reflect.InvocationTargetException;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -18,6 +25,9 @@ import java.util.stream.Collectors;
 import javax.script.ScriptEngine;
 import javax.script.ScriptEngineManager;
 
+import org.apache.lucene.analysis.Analyzer;
+import org.apache.lucene.analysis.TokenStream;
+import org.apache.lucene.analysis.tokenattributes.OffsetAttribute;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.IndexNotFoundException;
 import org.apache.lucene.index.IndexableField;
@@ -126,7 +136,9 @@ public class Main
         ).get(
             "/api/documents", Main::documents
         ).get(
-            "/api/download", Main::download
+            "/api/download/sqlite", Main::sqlite
+        ).get(
+            "/api/download/excel", Main::excel
         ).before(
             ctx -> logger.atInfo().log(ctx.fullUrl())
         ).ws("/ws/realtime", ws -> {
@@ -215,7 +227,7 @@ public class Main
         }
     }
 
-    private static void download(Context ctx) throws IOException {
+    private static void excel(Context ctx) throws IOException, ClassNotFoundException, SQLException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException {
         UUID uuid = UUID.fromString(ctx.queryParam("uuid"));
         List<Map.Entry<Integer,Document>> docs = lucene.documents(cache.get(uuid));
 
@@ -241,10 +253,110 @@ public class Main
             ctx.contentType(
                 "application/octet-stream"
             ).header(
-                "Content-Disposition", "attachment; filename=\"syslog.xlsx\""
+                "Content-Disposition", "attachment; filename=\"logucene.xlsx\""
             ).result(
                 buf.toByteArray()
             );
+        }
+    }
+
+    private static void sqlite(Context ctx) throws IOException, ClassNotFoundException, SQLException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException {
+        UUID uuid = UUID.fromString(ctx.queryParam("uuid"));
+        List<Map.Entry<Integer,Document>> docs = lucene.documents(cache.get(uuid));
+
+        String clazz = System.getProperty("sqlite.analyzer", "org.apache.lucene.analysis.standard.StandardAnalyzer");
+        Analyzer analyzer = (Analyzer) Class.forName(clazz).getDeclaredConstructor().newInstance();
+
+        String table =
+            "create table syslog (id, "
+            + Arrays.asList(LuceneFieldKeys.values()).stream().map(
+                field -> field.name()
+            ).collect(
+                Collectors.joining(", ")
+            )
+            + ");";
+
+        String virtual = "create virtual table syslog_fts using fts5(message);";
+
+        String insert =
+            "insert into syslog (id, "
+            + Arrays.asList(LuceneFieldKeys.values()).stream().map(
+                field -> field.name()
+            ).collect(
+                Collectors.joining(", ")
+            )
+            + ") values (?, "
+            + Arrays.asList(LuceneFieldKeys.values()).stream().map(
+                field -> "?"
+            ).collect(
+                Collectors.joining(", ")
+            )
+            + ");";
+
+        String fts = "insert into syslog_fts (rowid, message) values (?, ?);";
+
+        List<String> indexes = Arrays.asList(LuceneFieldKeys.values()).stream().filter(
+            field -> !Arrays.asList(LuceneFieldKeys.message, LuceneFieldKeys.raw).contains(field)
+        ).map(
+            field -> "create index idx_syslog_" + field.name() + " on syslog(" + field.name() + ");"
+        ).toList();
+
+        File temp = File.createTempFile("logucene_", ".sqlite3");
+        Class.forName("org.sqlite.JDBC");
+
+        try {
+            try (
+                Connection connection = DriverManager.getConnection("jdbc:sqlite:" + temp.getAbsolutePath());
+                Statement statement = connection.createStatement();
+            ) {
+                connection.setAutoCommit(false);
+                statement.execute(table);
+                statement.execute(virtual);
+                for (String index: indexes) {
+                    statement.execute(index);
+                }
+                for (Map.Entry<Integer,Document> doc: docs) {
+                    try (PreparedStatement sql = connection.prepareStatement(insert);) {
+                        sql.setInt(1, doc.getKey());
+                        for (int i = 0; i < LuceneFieldKeys.values().length; i++) {
+                            LuceneFieldKeys field = LuceneFieldKeys.values()[i];
+                            sql.setString(i + 2, doc.getValue().get(field.name()));
+                        }
+                        sql.execute();
+                    }
+                    String message = doc.getValue().get(LuceneFieldKeys.message.name());
+                    try (
+                        PreparedStatement sql = connection.prepareStatement(fts);
+                        TokenStream tokenizer = analyzer.tokenStream(
+                            LuceneFieldKeys.message.name(),
+                            message
+                        );
+                    ) {
+                        OffsetAttribute offset = tokenizer.getAttribute(OffsetAttribute.class);
+                        tokenizer.reset();
+                        String tokens = "";
+                        while (tokenizer.incrementToken()) {
+                            String token = message.substring(offset.startOffset(), offset.endOffset());
+                            if (!"".equals(token)) {
+                                tokens = ("".equals(tokens) ? "" : tokens + " ") + token;
+                            }
+                        }
+                        sql.setInt(1, doc.getKey());
+                        sql.setString(2, tokens);
+                        sql.execute();
+                    }
+                }
+                connection.commit();
+            }
+            ctx.contentType(
+                "application/octet-stream"
+            ).header(
+                "Content-Disposition", "attachment; filename=\"logucene.sqlite3\""
+            ).result(
+                new FileInputStream(temp)
+            );
+        } finally {
+            if (!temp.delete()) temp.deleteOnExit();
         }
     }
 }

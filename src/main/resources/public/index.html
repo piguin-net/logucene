@@ -206,7 +206,7 @@
           download: function() {
             var a = document.createElement('a');
             a.target = '_blank';
-            a.href = `/api/download?uuid=${this.$data.uuid}`;
+            a.href = `/api/download/sqlite?uuid=${this.$data.uuid}`;
             a.click();
           },
           switchRealTimeMode() {
