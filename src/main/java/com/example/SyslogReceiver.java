@@ -27,6 +27,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.spi.LoggingEventBuilder;
 
+import com.example.SyslogParser.Rfc3164;
+import com.example.SyslogParser.Rfc5424;
+import com.example.SyslogParser.SyslogParseException;
+
 public class SyslogReceiver implements Runnable {
 
     private Logger logger = LoggerFactory.getLogger(this.getClass());
@@ -35,11 +39,14 @@ public class SyslogReceiver implements Runnable {
         timestamp(LongField.class, long.class, new PointsConfig(new DecimalFormat(), Long.class)),
         day(KeywordField.class, String.class),
         time(KeywordField.class, String.class),
+        host(KeywordField.class, String.class),
         addr(KeywordField.class, String.class),
         port(IntField.class, int.class, new PointsConfig(new DecimalFormat(), Integer.class)),
         facility(KeywordField.class, String.class),
         severity(KeywordField.class, String.class),
-        message(TextField.class, String.class);
+        format(KeywordField.class, String.class),
+        message(TextField.class, String.class),
+        raw(TextField.class, String.class);
 
         private Class<? extends Field> fieldClazz;
         private Class<?> valueClazz;
@@ -79,7 +86,7 @@ public class SyslogReceiver implements Runnable {
     };
 
     public static enum Facility {
-        unknown(-1),
+        unknown(null),
         kern(0),
         user(1),
         mail(2),
@@ -105,13 +112,13 @@ public class SyslogReceiver implements Runnable {
         local6(22),
         local7(23);
 
-        private int key;
+        private Integer key;
 
-        Facility(int key) {
+        Facility(Integer key) {
             this.key = key;
         }
 
-        public static Facility of(int key) {
+        public static Facility of(Integer key) {
             for (Facility item: Facility.values()) {
                 if (item.key == key) {
                     return item;
@@ -122,7 +129,7 @@ public class SyslogReceiver implements Runnable {
     }
 
     public static enum Severity {
-        unknown(-1),
+        unknown(null),
         emerg(0),
         alert(1),
         crit(2),
@@ -132,13 +139,13 @@ public class SyslogReceiver implements Runnable {
         info(6),
         debug(7);
 
-        private int key;
+        private Integer key;
 
-        Severity(int key) {
+        Severity(Integer key) {
             this.key = key;
         }
 
-        public static Severity of(int key) {
+        public static Severity of(Integer key) {
             for (Severity item: Severity.values()) {
                 if (item.key == key) {
                     return item;
@@ -225,44 +232,48 @@ public class SyslogReceiver implements Runnable {
         if (!this.socket.isClosed()) this.socket.close();
     }
 
-    private Document parse(String host, int port, String message) throws InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException {
+    private Document parse(String addr, int port, String message) throws InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException {
         Document doc = new Document();
-        doc.add(LuceneFieldKeys.addr.field(host));
+        ZoneId userTimezone = ZoneId.of(System.getProperty("user.timezone"));
+        ZonedDateTime now = ZonedDateTime.now();
+        doc.add(LuceneFieldKeys.raw.field(message));
+        doc.add(LuceneFieldKeys.timestamp.field(now.toInstant().toEpochMilli()));
+        doc.add(LuceneFieldKeys.addr.field(addr));
         doc.add(LuceneFieldKeys.port.field(port));
-        Integer priority = this.getPriority(message);
-        if (priority != null) {
-            doc.add(LuceneFieldKeys.facility.field(Facility.of(priority / 8).name()));
-            doc.add(LuceneFieldKeys.severity.field(Severity.of(priority % 8).name()));
-        }
-        ZonedDateTime date = ZonedDateTime.now(
-            ZoneId.of(System.getProperty("user.timezone"))
-        );
-        doc.add(LuceneFieldKeys.timestamp.field(date.toInstant().toEpochMilli()));
-        doc.add(LuceneFieldKeys.day.field(date.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))));
-        doc.add(LuceneFieldKeys.time.field(date.format(DateTimeFormatter.ofPattern("HH:mm:ss"))));
-        doc.add(LuceneFieldKeys.message.field(message));
-        return doc;
-    }
-
-    private Integer getPriority(String message) {
-        boolean priority = false;
-        String buf = "";
-        for (char c: message.toCharArray()) {
-            if (priority) {
-                if (c == '>') {
-                    break;
-                } else if ('0' <= c && c <= '9') {
-                    buf = buf + c;
-                } else {
-                    return null;
-                }
+        try {
+            Rfc3164 log = SyslogParser.parse(message);
+            doc.add(LuceneFieldKeys.facility.field(Facility.of(log.facility).name()));
+            doc.add(LuceneFieldKeys.severity.field(Severity.of(log.severity).name()));
+            doc.add(LuceneFieldKeys.host.field(log.host));
+            doc.add(LuceneFieldKeys.message.field(log.message));
+            ZoneId syslogTimezone;
+            if (log instanceof Rfc5424) {
+                syslogTimezone = ((Rfc5424) log).zone;
             } else {
-                if (c == '<') {
-                    priority = true;
-                }
+                syslogTimezone = ZoneId.of(
+                    System.getProperty("syslog.timezone[" + addr + "]",
+                    System.getProperty("syslog.timezone",
+                    System.getProperty("user.timezone")
+                )));
             }
+            ZonedDateTime date = log.date.atZone(syslogTimezone);
+            date = date.withZoneSameInstant(userTimezone);
+            doc.add(LuceneFieldKeys.day.field(date.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))));
+            doc.add(LuceneFieldKeys.time.field(date.format(DateTimeFormatter.ofPattern("HH:mm:ss"))));
+            doc.add(LuceneFieldKeys.format.field(log.format));
+        } catch (SyslogParseException e) {
+            Integer priority = SyslogParser.parsePriority(message).getKey();
+            if (priority != null) {
+                doc.add(LuceneFieldKeys.facility.field(Facility.of(priority / 8).name()));
+                doc.add(LuceneFieldKeys.severity.field(Severity.of(priority % 8).name()));
+            }
+            doc.add(LuceneFieldKeys.host.field(addr));
+            doc.add(LuceneFieldKeys.day.field(now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))));
+            doc.add(LuceneFieldKeys.time.field(now.format(DateTimeFormatter.ofPattern("HH:mm:ss"))));
+            doc.add(LuceneFieldKeys.message.field(message));
+            doc.add(LuceneFieldKeys.format.field("unknown"));
         }
-        return "".equals(buf) ? null : Integer.valueOf(buf);
+        return doc;
     }
     
 }
