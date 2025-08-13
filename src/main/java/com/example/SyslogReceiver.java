@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
@@ -233,14 +234,22 @@ public class SyslogReceiver implements Runnable {
     }
 
     private Document parse(String addr, int port, String message) throws InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException {
-        Document doc = new Document();
         ZoneId userTimezone = ZoneId.of(System.getProperty("user.timezone"));
         ZonedDateTime now = ZonedDateTime.now();
-        doc.add(LuceneFieldKeys.raw.field(message));
-        doc.add(LuceneFieldKeys.timestamp.field(now.toInstant().toEpochMilli()));
-        doc.add(LuceneFieldKeys.addr.field(addr));
-        doc.add(LuceneFieldKeys.port.field(port));
+        Supplier<Document> init = () -> {
+            Document doc = new Document();
+            try {
+                doc.add(LuceneFieldKeys.raw.field(message));
+                doc.add(LuceneFieldKeys.timestamp.field(now.toInstant().toEpochMilli()));
+                doc.add(LuceneFieldKeys.addr.field(addr));
+                doc.add(LuceneFieldKeys.port.field(port));
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+            return doc;
+        };
         try {
+            Document doc = init.get();
             Rfc3164 log = SyslogParser.parse(message);
             doc.add(LuceneFieldKeys.facility.field(Facility.of(log.facility).name()));
             doc.add(LuceneFieldKeys.severity.field(Severity.of(log.severity).name()));
@@ -261,7 +270,9 @@ public class SyslogReceiver implements Runnable {
             doc.add(LuceneFieldKeys.day.field(date.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))));
             doc.add(LuceneFieldKeys.time.field(date.format(DateTimeFormatter.ofPattern("HH:mm:ss"))));
             doc.add(LuceneFieldKeys.format.field(log.format));
+            return doc;
         } catch (SyslogParseException e) {
+            Document doc = init.get();
             Integer priority = SyslogParser.parsePriority(message).getKey();
             if (priority != null) {
                 doc.add(LuceneFieldKeys.facility.field(Facility.of(priority / 8).name()));
@@ -272,8 +283,8 @@ public class SyslogReceiver implements Runnable {
             doc.add(LuceneFieldKeys.time.field(now.format(DateTimeFormatter.ofPattern("HH:mm:ss"))));
             doc.add(LuceneFieldKeys.message.field(message));
             doc.add(LuceneFieldKeys.format.field("unknown"));
+            return doc;
         }
-        return doc;
     }
     
 }

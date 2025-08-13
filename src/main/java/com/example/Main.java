@@ -2,11 +2,12 @@ package com.example;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
-import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.PipedInputStream;
+import java.io.PipedOutputStream;
 import java.lang.reflect.InvocationTargetException;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -19,8 +20,8 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import javax.script.ScriptEngine;
 import javax.script.ScriptEngineManager;
@@ -31,6 +32,8 @@ import org.apache.lucene.analysis.tokenattributes.OffsetAttribute;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.IndexNotFoundException;
 import org.apache.lucene.index.IndexableField;
+import org.apache.lucene.queryparser.classic.ParseException;
+import org.apache.lucene.queryparser.flexible.core.QueryNodeException;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.SortedNumericSortField;
@@ -42,7 +45,10 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.example.LuceneManager.LuceneReader;
 import com.example.SyslogReceiver.LuceneFieldKeys;
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.javalin.Javalin;
@@ -62,14 +68,12 @@ public class Main
     private static LuceneManager lucene;
     private static SyslogReceiver watcher;
     private static Thread worker;
-    private static Map<UUID, List<Integer>> cache = new HashMap<>();  // TODO: メモリリーク
     private static Map<Integer, WsConnectContext> connections = new HashMap<>();
     private static String script = System.getProperty("syslog.listener", null);
     private static ScriptEngineManager manager = new ScriptEngineManager();
     private static ScriptEngine engine = manager.getEngineByName("groovy");
 
     public static class SearchResult {
-        public UUID uuid = UUID.randomUUID();
         public long total = 0;
         public List<Integer> ids = new ArrayList<>();
         public long ms = 0;
@@ -132,7 +136,7 @@ public class Main
                 staticFiles.location = Location.CLASSPATH;
             });
         }).get(
-            "/api/search", Main::search
+            "/api/search", ctx -> ctx.json(search(ctx))
         ).get(
             "/api/documents", Main::documents
         ).get(
@@ -141,7 +145,10 @@ public class Main
             "/api/download/excel", Main::excel
         ).before(
             ctx -> logger.atInfo().log(ctx.fullUrl())
-        ).ws("/ws/realtime", ws -> {
+        ).exception(Exception.class, (e, ctx) -> {
+            logger.error(ctx.fullUrl(), e);
+            ctx.status(HttpStatus.INTERNAL_SERVER_ERROR).json(e);
+        }).ws("/ws/realtime", ws -> {
             ws.onConnect(ctx -> {
                 logger.atInfo().addKeyValue("addr", ctx.host()).log("ws connected.");
                 ctx.enableAutomaticPings();
@@ -166,7 +173,7 @@ public class Main
         }};
     }
 
-    private static void search(Context ctx) {
+    private static SearchResult search(Context ctx) throws ParseException, IOException, QueryNodeException {
         long start = ZonedDateTime.now().toInstant().toEpochMilli();
         SearchResult result = new SearchResult();
         try {
@@ -191,45 +198,60 @@ public class Main
             );
             long end = ZonedDateTime.now().toInstant().toEpochMilli();
             result.ms = end - start;
-            cache.put(result.uuid, result.ids);
-            ctx.json(result);
+            return result;
         } catch (IndexNotFoundException e) {
             logger.atWarn().log("index not found.");
-            cache.put(result.uuid, new ArrayList<>());
-            ctx.json(result);
-        } catch (Exception e) {
-            ctx.status(HttpStatus.INTERNAL_SERVER_ERROR).json(e);
+            return new SearchResult();
         }
     }
 
-    private static void documents(Context ctx) {
+    private static void documents(Context ctx) throws ParseException, IOException, QueryNodeException {
         try {
-            UUID uuid = UUID.fromString(ctx.queryParam("uuid"));
+            SearchResult hits = search(ctx);
             Integer first = Integer.valueOf(ctx.queryParam("first"));
             Integer last = Integer.valueOf(ctx.queryParam("last"));
-            List<Integer> ids = cache.get(uuid).subList(
+            List<Integer> ids = hits.ids.subList(
                 first,
-                last > cache.get(uuid).size()
-                    ? cache.get(uuid).size()
+                last > hits.ids.size()
+                    ? hits.ids.size()
                     : last
             );
-            List<Map.Entry<Integer,Document>> docs = lucene.documents(ids);
-            List<Map<String, Object>> result = docs.stream().map(doc -> {
-                Map<String, Object> dict = convert(doc.getValue());
-                dict.put("id", doc.getKey());
-                return dict;
-            }).collect(Collectors.toList());
-            ctx.json(result);
+            PipedInputStream pin = new PipedInputStream();
+            PipedOutputStream pout = new PipedOutputStream(pin);
+            new Thread(() -> {
+                try (JsonGenerator json = new JsonFactory().createGenerator(pout);) {
+                    json.writeStartObject();
+                    json.writeNumberField("total", hits.total);
+                    json.writeFieldName("docs");
+                    json.writeStartArray();
+                    try (LuceneReader reader = lucene.getReader();) {
+                        for (int id: ids) {
+                            Document doc = reader.get(id);
+                            json.writeStartObject();
+                            json.writeNumberField("id", id);
+                            for (LuceneFieldKeys field: LuceneFieldKeys.values()) {
+                                json.writeStringField(field.name(), doc.get(field.name()));
+                            }
+                            json.writeEndObject();
+                            json.flush();
+                        }
+                    }
+                    json.writeEndArray();
+                    json.writeEndObject();
+                    json.flush();
+                    json.close();
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            }).start();
+            ctx.result(pin);
         } catch (IndexNotFoundException e) {
             logger.atWarn().log("index not found.");
-        } catch (Exception e) {
-            ctx.status(HttpStatus.INTERNAL_SERVER_ERROR).json(e);
         }
     }
 
-    private static void excel(Context ctx) throws IOException, ClassNotFoundException, SQLException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException {
-        UUID uuid = UUID.fromString(ctx.queryParam("uuid"));
-        List<Map.Entry<Integer,Document>> docs = lucene.documents(cache.get(uuid));
+    private static void excel(Context ctx) throws IOException, ClassNotFoundException, SQLException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException, ParseException, QueryNodeException {
+        SearchResult hits = search(ctx);
 
         try (Workbook book = new XSSFWorkbook();) {
             Sheet sheet = book.createSheet();
@@ -240,12 +262,15 @@ public class Main
             for (LuceneFieldKeys field: LuceneFieldKeys.values()) {
                 header.createCell(x++).setCellValue(field.name());
             }
-            for (Map.Entry<Integer,Document> doc: docs) {
-                x = 0;
-                Row row = sheet.createRow(y++);
-                row.createCell(x++).setCellValue(doc.getKey());
-                for (LuceneFieldKeys field: LuceneFieldKeys.values()) {
-                    row.createCell(x++).setCellValue(doc.getValue().get(field.name()));
+            try (LuceneReader reader = lucene.getReader();) {
+                for (int id: hits.ids) {
+                    Document doc = reader.get(id);
+                    x = 0;
+                    Row row = sheet.createRow(y++);
+                    row.createCell(x++).setCellValue(id);
+                    for (LuceneFieldKeys field: LuceneFieldKeys.values()) {
+                        row.createCell(x++).setCellValue(doc.get(field.name()));
+                    }
                 }
             }
             ByteArrayOutputStream buf = new ByteArrayOutputStream();
@@ -260,71 +285,64 @@ public class Main
         }
     }
 
-    private static void sqlite(Context ctx) throws IOException, ClassNotFoundException, SQLException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException {
-        UUID uuid = UUID.fromString(ctx.queryParam("uuid"));
-        List<Map.Entry<Integer,Document>> docs = lucene.documents(cache.get(uuid));
+    private static void sqlite(Context ctx) throws IOException, ClassNotFoundException, SQLException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException, ParseException, QueryNodeException {
+        SearchResult hits = search(ctx);
 
         String clazz = System.getProperty("sqlite.analyzer", "org.apache.lucene.analysis.standard.StandardAnalyzer");
         Analyzer analyzer = (Analyzer) Class.forName(clazz).getDeclaredConstructor().newInstance();
 
-        String table =
-            "create table syslog (id, "
-            + Arrays.asList(LuceneFieldKeys.values()).stream().map(
-                field -> field.name()
-            ).collect(
-                Collectors.joining(", ")
-            )
-            + ");";
+        List<String> fields = Stream.concat(
+            Arrays.asList("id").stream(),
+            Arrays.asList(LuceneFieldKeys.values()).stream().map(field -> field.name())
+        ).toList();
+
+        String table = "create table syslog ("
+                     + String.join(", ", fields)
+                     + ");";
 
         String virtual = "create virtual table syslog_fts using fts5(message);";
 
-        String insert =
-            "insert into syslog (id, "
-            + Arrays.asList(LuceneFieldKeys.values()).stream().map(
-                field -> field.name()
-            ).collect(
-                Collectors.joining(", ")
-            )
-            + ") values (?, "
-            + Arrays.asList(LuceneFieldKeys.values()).stream().map(
-                field -> "?"
-            ).collect(
-                Collectors.joining(", ")
-            )
-            + ");";
+        String insert = "insert into syslog ("
+                      + String.join(", ", fields)
+                      + ") values ("
+                      + fields.stream().map(field -> "?").collect(Collectors.joining(", "))
+                      + ");";
 
         String fts = "insert into syslog_fts (rowid, message) values (?, ?);";
 
-        List<String> indexes = Arrays.asList(LuceneFieldKeys.values()).stream().filter(
-            field -> !Arrays.asList(LuceneFieldKeys.message, LuceneFieldKeys.raw).contains(field)
+        List<String> indexes = fields.stream().filter(
+            field -> !Arrays.asList(
+                LuceneFieldKeys.message.name(),
+                LuceneFieldKeys.raw.name()
+            ).contains(field)
         ).map(
-            field -> "create index idx_syslog_" + field.name() + " on syslog(" + field.name() + ");"
+            field -> "create index idx_syslog_" + field + " on syslog(" + field + ");"
         ).toList();
 
-        File temp = File.createTempFile("logucene_", ".sqlite3");
         Class.forName("org.sqlite.JDBC");
 
-        try {
-            try (
-                Connection connection = DriverManager.getConnection("jdbc:sqlite:" + temp.getAbsolutePath());
-                Statement statement = connection.createStatement();
-            ) {
-                connection.setAutoCommit(false);
-                statement.execute(table);
-                statement.execute(virtual);
-                for (String index: indexes) {
-                    statement.execute(index);
-                }
-                for (Map.Entry<Integer,Document> doc: docs) {
+        try (
+            TempFile temp = new TempFile("logucene_", ".sqlite3");
+            Connection connection = DriverManager.getConnection("jdbc:sqlite:" + temp.getAbsolutePath());
+            Statement statement = connection.createStatement();
+        ) {
+            connection.setAutoCommit(false);
+            statement.execute(table);
+            statement.execute(virtual);
+            for (String index: indexes) {
+                statement.execute(index);
+            }
+            try (LuceneReader reader = lucene.getReader();) {
+                for (int id: hits.ids) {
+                    Document doc = reader.get(id);
                     try (PreparedStatement sql = connection.prepareStatement(insert);) {
-                        sql.setInt(1, doc.getKey());
-                        for (int i = 0; i < LuceneFieldKeys.values().length; i++) {
-                            LuceneFieldKeys field = LuceneFieldKeys.values()[i];
-                            sql.setString(i + 2, doc.getValue().get(field.name()));
+                        sql.setInt(1, id);
+                        for (int i = 1; i < fields.size(); i++) {
+                            sql.setString(i + 1, doc.get(fields.get(i)));
                         }
                         sql.execute();
                     }
-                    String message = doc.getValue().get(LuceneFieldKeys.message.name());
+                    String message = doc.get(LuceneFieldKeys.message.name());
                     try (
                         PreparedStatement sql = connection.prepareStatement(fts);
                         TokenStream tokenizer = analyzer.tokenStream(
@@ -341,22 +359,20 @@ public class Main
                                 tokens = ("".equals(tokens) ? "" : tokens + " ") + token;
                             }
                         }
-                        sql.setInt(1, doc.getKey());
+                        sql.setInt(1, id);
                         sql.setString(2, tokens);
                         sql.execute();
                     }
                 }
-                connection.commit();
             }
+            connection.commit();
             ctx.contentType(
                 "application/octet-stream"
             ).header(
-                "Content-Disposition", "attachment; filename=\"logucene.sqlite3\""
+                "Content-Disposition", "attachment; filename=\"logucene.sqlite3.gz\""
             ).result(
-                new FileInputStream(temp)
+                new GzipCompressInputStream(new FileInputStream(temp))
             );
-        } finally {
-            if (!temp.delete()) temp.deleteOnExit();
         }
     }
 }

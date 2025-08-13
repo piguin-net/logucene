@@ -5,8 +5,6 @@ import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 
 import org.apache.lucene.analysis.Analyzer;
@@ -30,6 +28,28 @@ public class LuceneManager implements Closeable {
     private FSDirectory dir;
     private IndexWriter writer;
     private Analyzer analyzer;
+
+    public static class LuceneReader implements Closeable {
+
+        private final DirectoryReader reader;
+        private final IndexSearcher searcher;
+
+        public LuceneReader(FSDirectory dir) throws IOException {
+            this.reader = DirectoryReader.open(dir);
+            this.searcher = new IndexSearcher(reader);
+        }
+
+        public Document get(Integer id) throws IOException {
+            StoredFields storedFields = searcher.storedFields();
+            return storedFields.document(id);
+        } 
+
+        @Override
+        public void close() throws IOException {
+            this.reader.close();
+        }
+        
+    }
 
     public LuceneManager(String path) throws IOException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException, ClassNotFoundException {
         this.dir = FSDirectory.open(Paths.get(path));
@@ -57,17 +77,8 @@ public class LuceneManager implements Closeable {
         }
     }
 
-    public List<Map.Entry<Integer,Document>> documents(List<Integer> ids) throws IOException {
-        try (DirectoryReader reader = DirectoryReader.open(dir);) {
-            IndexSearcher searcher = new IndexSearcher(reader);
-            StoredFields storedFields = searcher.storedFields();
-            List<Map.Entry<Integer,Document>> docs = new ArrayList<>();  // TODO: 消費メモリ
-            for (int id: ids) {
-                Document doc = storedFields.document(id);
-                docs.add(Map.entry(id, doc));
-            }
-            return docs;
-        }
+    public LuceneReader getReader() throws IOException {
+        return new LuceneReader(dir);
     }
 
     public Path getDirectory() {

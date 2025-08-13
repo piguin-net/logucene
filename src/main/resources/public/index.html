@@ -119,7 +119,6 @@
               {name: 'port'},
               {name: 'raw'},
             ]],
-            uuid: null,
             logs: [],
             total: 0,
             rows: 100,
@@ -134,7 +133,6 @@
         },
         methods: {
           search: function(event) {
-            this.$data.uuid = null;
             this.$data.logs = [];
             this.$data.total = 0;
             fetch(
@@ -142,7 +140,6 @@
             ).then(response => {
               if (response.ok) {
                 response.json().then(json => {
-                  this.$data.uuid  = json.uuid;
                   this.$data.total = json.total;
                   this.pageChange({first: 0, rows: this.$data.rows});
                   if (this.$data.total > 0) {
@@ -179,13 +176,14 @@
             this.$data.rows = event.rows;
             fetch(
               `/api/documents`
-              + `?uuid=${this.$data.uuid}`
+              + `?query=${this.$data.query}`
               + `&first=${event.first}`
               + `&last=${event.first + event.rows}`
             ).then(response => {
               if (response.ok) {
                 response.json().then(json => {
-                  this.$data.logs = json;
+                  this.$data.logs = json.docs;
+                  this.$data.total = json.total;
                 });
               } else {
                 response.json().then(json => {
@@ -206,11 +204,10 @@
           download: function() {
             var a = document.createElement('a');
             a.target = '_blank';
-            a.href = `/api/download/sqlite?uuid=${this.$data.uuid}`;
+            a.href = `/api/download/sqlite?query=${this.$data.query}`;
             a.click();
           },
           switchRealTimeMode() {
-            this.$data.uuid = null;
             this.$data.logs = [];
             this.$data.total = 0;
             if (this.$data.realtime) {

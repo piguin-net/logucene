@@ -4,11 +4,14 @@
  *   doc.timestamp
  *   doc.day
  *   doc.time
+ *   doc.host
  *   doc.addr
  *   doc.port
  *   doc.facility
  *   doc.severity
+ *   doc.format
  *   doc.message
+ *   doc.raw
  */
 
 @Grapes(
