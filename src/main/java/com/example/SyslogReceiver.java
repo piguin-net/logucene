@@ -28,8 +28,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.spi.LoggingEventBuilder;
 
+import com.example.SyslogParser.Facility;
 import com.example.SyslogParser.Rfc3164;
 import com.example.SyslogParser.Rfc5424;
+import com.example.SyslogParser.Severity;
 import com.example.SyslogParser.SyslogParseException;
 
 public class SyslogReceiver implements Runnable {
@@ -83,76 +85,6 @@ public class SyslogReceiver implements Runnable {
                     }
                 }
             }};
-        }
-    };
-
-    public static enum Facility {
-        unknown(null),
-        kern(0),
-        user(1),
-        mail(2),
-        daemon(3),
-        auth(4),
-        syslog(5),
-        lpr(6),
-        news(7),
-        uucp(8),
-        cron(9),
-        authpriv(10),
-        ftp(11),
-        ntp(12),
-        logAudit(13),
-        logAlert(14),
-        clock(15),
-        local0(16),
-        local1(17),
-        local2(18),
-        local3(19),
-        local4(20),
-        local5(21),
-        local6(22),
-        local7(23);
-
-        private Integer key;
-
-        Facility(Integer key) {
-            this.key = key;
-        }
-
-        public static Facility of(Integer key) {
-            for (Facility item: Facility.values()) {
-                if (item.key == key) {
-                    return item;
-                }
-            }
-            return unknown;
-        }
-    }
-
-    public static enum Severity {
-        unknown(null),
-        emerg(0),
-        alert(1),
-        crit(2),
-        err(3),
-        warning(4),
-        notice(5),
-        info(6),
-        debug(7);
-
-        private Integer key;
-
-        Severity(Integer key) {
-            this.key = key;
-        }
-
-        public static Severity of(Integer key) {
-            for (Severity item: Severity.values()) {
-                if (item.key == key) {
-                    return item;
-                }
-            }
-            return unknown;
         }
     };
 
@@ -251,8 +183,8 @@ public class SyslogReceiver implements Runnable {
         try {
             Document doc = init.get();
             Rfc3164 log = SyslogParser.parse(message);
-            doc.add(LuceneFieldKeys.facility.field(Facility.of(log.facility).name()));
-            doc.add(LuceneFieldKeys.severity.field(Severity.of(log.severity).name()));
+            doc.add(LuceneFieldKeys.facility.field(log.facility.name()));
+            doc.add(LuceneFieldKeys.severity.field(log.severity.name()));
             doc.add(LuceneFieldKeys.host.field(log.host));
             doc.add(LuceneFieldKeys.message.field(log.message));
             ZoneId syslogTimezone;

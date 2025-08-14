@@ -11,19 +11,97 @@ import lombok.ToString;
 
 public class SyslogParser {
 
+    public static enum Facility {
+        unknown(null),
+        kern(0),
+        user(1),
+        mail(2),
+        daemon(3),
+        auth(4),
+        syslog(5),
+        lpr(6),
+        news(7),
+        uucp(8),
+        cron(9),
+        authpriv(10),
+        ftp(11),
+        ntp(12),
+        logAudit(13),
+        logAlert(14),
+        clock(15),
+        local0(16),
+        local1(17),
+        local2(18),
+        local3(19),
+        local4(20),
+        local5(21),
+        local6(22),
+        local7(23);
+
+        private final Integer id;
+
+        Facility(Integer id) {
+            this.id = id;
+        }
+
+        public Integer getId() {
+            return this.id;
+        }
+
+        public static Facility of(Integer id) {
+            for (Facility item: Facility.values()) {
+                if (item.id == id) {
+                    return item;
+                }
+            }
+            return unknown;
+        }
+    }
+
+    public static enum Severity {
+        unknown(null),
+        emerg(0),
+        alert(1),
+        crit(2),
+        err(3),
+        warning(4),
+        notice(5),
+        info(6),
+        debug(7);
+
+        private final Integer id;
+
+        Severity(Integer id) {
+            this.id = id;
+        }
+
+        public Integer getId() {
+            return this.id;
+        }
+
+        public static Severity of(Integer id) {
+            for (Severity item: Severity.values()) {
+                if (item.id == id) {
+                    return item;
+                }
+            }
+            return unknown;
+        }
+    };
+
     @ToString()
     public static class Rfc3164 {
         public String format;
         public Integer priority;
-        public Integer facility;
-        public Integer severity;
+        public Facility facility;
+        public Severity severity;
         public LocalDateTime date;
         public String host;
         public String message;
         public Rfc3164(Integer priority) {
             this.priority   = priority;
-            this.facility   = this.priority / 8;
-            this.severity   = this.priority % 8;
+            this.facility   = Facility.of(this.priority / 8);
+            this.severity   = Severity.of(this.priority % 8);
             this.format = "rfc3164";
         }
     }
