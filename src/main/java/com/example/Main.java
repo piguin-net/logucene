@@ -74,6 +74,7 @@ public class Main
     private static ScriptEngine engine = manager.getEngineByName("groovy");
 
     public static class SearchResult {
+        public String query;
         public long total = 0;
         public List<Integer> ids = new ArrayList<>();
         public long ms = 0;
@@ -176,11 +177,11 @@ public class Main
     private static SearchResult search(Context ctx) throws ParseException, IOException, QueryNodeException {
         long start = ZonedDateTime.now().toInstant().toEpochMilli();
         SearchResult result = new SearchResult();
+        result.query = ctx.queryParam("query");
         try {
-            String query = ctx.queryParam("query");
             TopDocs hits = lucene.search(
                 LuceneFieldKeys.message.name(),
-                query == null || "".equals(query.trim()) ? "*:*" : query,
+                result.query,
                 new Sort(new SortedNumericSortField(
                     LuceneFieldKeys.timestamp.name(),
                     SortField.Type.LONG,
@@ -208,8 +209,8 @@ public class Main
     private static void documents(Context ctx) throws ParseException, IOException, QueryNodeException {
         try {
             SearchResult hits = search(ctx);
-            Integer first = Integer.valueOf(ctx.queryParam("first"));
-            Integer last = Integer.valueOf(ctx.queryParam("last"));
+            Integer first = ctx.queryParam("first") != null ? Integer.valueOf(ctx.queryParam("first")) : 0;
+            Integer last = ctx.queryParam("last") != null ? Integer.valueOf(ctx.queryParam("last")) : hits.ids.size();
             List<Integer> ids = hits.ids.subList(
                 first,
                 last > hits.ids.size()
@@ -222,6 +223,7 @@ public class Main
                 try (JsonGenerator json = new JsonFactory().createGenerator(pout);) {
                     json.writeStartObject();
                     json.writeNumberField("total", hits.total);
+                    json.writeNumberField("ms", hits.ms);
                     json.writeFieldName("docs");
                     json.writeStartArray();
                     try (LuceneReader reader = lucene.getReader();) {
@@ -239,7 +241,6 @@ public class Main
                     json.writeEndArray();
                     json.writeEndObject();
                     json.flush();
-                    json.close();
                 } catch (Exception e) {
                     throw new RuntimeException(e);
                 }

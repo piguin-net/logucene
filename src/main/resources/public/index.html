@@ -13,6 +13,12 @@
         display: flex;
         flex-direction: column;
       }
+      .p-tabs {
+        height: calc(100% - 42px);
+      }
+      .p-tabpanels,.p-tabpanel-active {
+        height: 100%;
+      }
       .p-datatable,.p-datatable-table,.p-datatable-tbody {
         height: 100%;
       }
@@ -29,6 +35,7 @@
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://unpkg.com/primevue/umd/primevue.min.js"></script>
     <script src="https://unpkg.com/@primevue/themes/umd/aura.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@6.0.0/dist/echarts.min.js"></script>
 
     <div id="app">
     </div>
@@ -38,13 +45,21 @@
       const {
         Button,
         Column,
-        ColumnGroup,
         Config,
         DataTable,
+        DatePicker,
         Dialog,
+        FloatLabel,
         InputText,
+        IftaLabel,
+        MultiSelect,
         PickList,
-        Row,
+        Select,
+        Tab,
+        Tabs,
+        TabList,
+        TabPanel,
+        TabPanels,
         Themes,
         Toast,
         ToastService,
@@ -55,39 +70,58 @@
       const root = {
         template: `
           <Toast position="bottom-right" />
-          <form style="display: flex;" @submit="search(); $event.preventDefault();">
-            <div style="display: flex; align-items: center; padding: 8px;">
+          <div style="display: flex; justify-content: space-between;">
+            <div style="display: flex; align-items: center; width: 180px; justify-content: space-evenly;">
               <ToggleSwitch v-model="realtime" @change="switchRealTimeMode" />
               <label>RealTimeMode</label>
             </div>
-            <InputText type="text" v-model="query" :disabled="realtime" style="width: 100%" placeholder="Query" />
-            <Button severity="success" icon="pi pi-search" :disabled="realtime" @click="search" label="Search" />
-            <Button severity="info" icon="pi pi-download" :disabled="realtime" @click="download" />
-            <Button severity="help" icon="pi pi-cog" @click="showDialog = true" />
-          </form>
-          <DataTable
-            ref="table"
-            showGridlines
-            scrollable
-            paginator
-            :lazy="true"
-            :totalRecords="total"
-            :rows="rows"
-            :rowsPerPageOptions="[100, 300, 500, 1000]"
-            :value="logs"
-            scrollHeight="100%"
-            :virtualScrollerOptions="{ itemSize: 49 }"
-            @page="pageChange"
-          >
-            <Column
-              v-for="field in fields[0]"
-              :field="field.name"
-              :header="field.name"
-              :headerStyle="{'background-color': 'lightgray'}"
-            ></Column>
-            <template #empty> no data. </template>
-          </DataTable>
+            <div style="display: flex; width: calc(100% - 180px);">
+              <DatePicker ref="datePicker" v-model="date" :disabled="realtime" dateFormat="yy-mm-dd" showIcon @update:modelValue="dateSelect" :inputStyle="{'width': '110px'}" />
+              <MultiSelect v-model="severity" :disabled="realtime" :options="['unknown','emerg','alert','crit','err','warning','notice','info','debug']" style="width: 200px;" filter placeholder="severity" :maxSelectedLabels="1" @update:modelValue="search" />
+              <InputText type="text" v-model="query" :disabled="realtime" style="width: calc(100% - 531px);" placeholder="Query" @keydown="$event.key == 'Enter' && search()" />
+              <Button severity="success" icon="pi pi-search" :disabled="realtime" @click="search" label="Search" />
+              <Button severity="info" icon="pi pi-download" :disabled="realtime" @click="download" />
+              <Button severity="help" icon="pi pi-cog" @click="showDialog = true" />
+            </div>
+          </div>
+          <Tabs :value="tab" @update:value="tabSwitch">
+            <TabList>
+              <Tab value="table">Table</Tab>
+              <Tab value="chart">Chart</Tab>
+            </TabList>
+            <TabPanels>
+              <TabPanel value="table">
+                <DataTable
+                  ref="table"
+                  showGridlines
+                  scrollable
+                  paginator
+                  :lazy="true"
+                  :totalRecords="total"
+                  :first="first"
+                  :rows="rows"
+                  :rowsPerPageOptions="[100, 300, 500, 1000]"
+                  :value="logs"
+                  scrollHeight="100%"
+                  :virtualScrollerOptions="{ itemSize: 49 }"
+                  @page="pageChange"
+                >
+                  <Column
+                    v-for="field in fields[0]"
+                    :field="field.name"
+                    :header="field.name"
+                    :headerStyle="{'background-color': 'lightgray'}"
+                  ></Column>
+                  <template #empty> no data. </template>
+                </DataTable>
+              </TabPanel>
+              <TabPanel value="chart">
+                <div ref="chart" style="height: 100%;"></div>
+              </TabPanel>
+            </TabPanels>
+          </Tabs>
           <Dialog v-model:visible="showDialog" modal header="Config">
+            <h3>Table</h3>
             <PickList v-model="fields" dataKey="name">
               <template v-slot:sourceheader>
                 <label style="font-weight: bold;">Show</label>
@@ -99,10 +133,22 @@
                 <label style="width: 100px;">{{ option.name }}</label>
               </template>
             </PickList>
+            <h3>Chart</h3>
+            <div style="display: flex;">
+              <IftaLabel>
+                <Select v-model="yaxis" inputId="yaxis" :options="Object.keys(axis)" @change="changeAxis" />
+                <label for="yaxis">Y-Axis</label>
+              </IftaLabel>
+              <IftaLabel>
+                <Select v-model="xaxis" inputId="xaxis" :options="Object.keys(axis)" @change="changeAxis" />
+                <label for="xaxis">X-Axis</label>
+              </IftaLabel>
+            </div>
           </Dialog>
         `,
         data: function() {
           return {
+            date: new Date(),
             query: '*:*',
             fields: [[
               {name: 'day'},
@@ -121,33 +167,78 @@
             ]],
             logs: [],
             total: 0,
+            first: 0,
             rows: 100,
             toast: useToast(),
             showDialog: false,
             socket: null,
             realtime: false,
+            tab: 'table',
+            chart: null,
+            yaxis: 'host',
+            xaxis: 'severity',
+            axis: {
+              'day': {query: value => `day:${value}`, format: log => log.day, collect: data => [...new Set(data.map(row => row.day))]},
+              'time': {query: value => `time:[${value}:00:00 TO ${value}:59:59]`, format: log => log.time.slice(0, 2), collect: data => [...Array(24)].map((_, i) => ('0' + i).slice(-2))},
+              'host': {query: value => `host:${value}`, format: log => log.host, collect: data => [...new Set(data.map(row => row.host))]},
+              'format': {query: value => `format:${value}`, format: log => log.format, collect: data => ['unknown', 'rfc3164', 'rfc5424']},
+              'addr': {query: value => `addr:${value}`, format: log => log.addr, collect: data => [...new Set(data.map(row => row.addr))]},
+              'port': {query: value => `port:${value}`, format: log => log.port, collect: data => [...new Set(data.map(row => row.port))]},
+              'facility': {query: value => `facility:${value}`, format: log => log.facility, collect: data => [...new Set(data.map(row => row.facility))]},
+              'severity': {query: value => `severity:${value}`, format: log => log.severity, collect: data => ['unknown', 'emerg', 'alert', 'crit', 'err', 'warning', 'notice', 'info', 'debug']},
+            },
+            severity: []
           };
         },
         mounted: function() {
           this.search();
         },
         methods: {
+          dateSelect: function(event) {
+            this.search();
+          },
+          getQuery: function() {
+            var query = (this.$data.query || '').trim() == ''
+              ? '*:*'
+              : `${this.$data.query}`;
+            if (this.$data.date != null) {
+              var y = this.$data.date.getFullYear();
+              var m = ('0' + (this.$data.date.getMonth() + 1)).slice(-2);
+              var d = ('0' + this.$data.date.getDate()).slice(-2);
+              query = `(${query}) AND day:[${y}-${m}-${d} TO ${y}-${m}-${d}]`;
+            }
+            if (this.$data.severity.length > 0) {
+              query = `(${query}) AND severity:${this.$data.severity.join('|')}`;
+            }
+            return encodeURIComponent(query);
+          },
           search: function(event) {
             this.$data.logs = [];
             this.$data.total = 0;
+            this.$data.first = 0;
+            this.pageChange({first: 0, rows: this.$data.rows}, true);
+            this.showChart();
+          },
+          pageChange: function(event, showToast) {
+            this.$data.rows = event.rows;
+            this.$data.first = event.first;
             fetch(
-              `/api/search?query=${this.$data.query}`
+              `/api/documents?query=${this.getQuery()}`
+              + `&first=${event.first}`
+              + `&last=${event.first + event.rows}`
             ).then(response => {
               if (response.ok) {
                 response.json().then(json => {
+                  this.$data.logs = json.docs;
                   this.$data.total = json.total;
-                  this.pageChange({first: 0, rows: this.$data.rows});
                   if (this.$data.total > 0) {
-                    this.$data.toast.add({
-                      severity: 'info',
-                      summary: `${this.$data.total.toLocaleString()} hits.(${json.ms.toLocaleString()}ms)`,
-                      life: 5000,
-                    });
+                    if (showToast) {
+                      this.$data.toast.add({
+                        severity: 'info',
+                        summary: `${this.$data.total.toLocaleString()} hits.(${json.ms.toLocaleString()}ms)`,
+                        life: 5000,
+                      });
+                    }
                   } else {
                     this.$data.toast.add({
                       severity: 'warn',
@@ -172,52 +263,125 @@
               });
             });
           },
-          pageChange: function(event) {
-            this.$data.rows = event.rows;
-            fetch(
-              `/api/documents`
-              + `?query=${this.$data.query}`
-              + `&first=${event.first}`
-              + `&last=${event.first + event.rows}`
-            ).then(response => {
-              if (response.ok) {
-                response.json().then(json => {
-                  this.$data.logs = json.docs;
-                  this.$data.total = json.total;
-                });
-              } else {
-                response.json().then(json => {
-                  this.$data.toast.add({
-                    severity: 'error',
-                    summary: response.statusText,
-                    detail: json.message,
-                  });
-                });
-              }
-            }).catch(e => {
-              this.$data.toast.add({
-                severity: 'error',
-                summary: e,
-              });
-            });
-          },
           download: function() {
             var a = document.createElement('a');
             a.target = '_blank';
-            a.href = `/api/download/sqlite?query=${this.$data.query}`;
+            a.href = `/api/download/sqlite?query=${this.getQuery()}`;
             a.click();
           },
           switchRealTimeMode() {
             this.$data.logs = [];
             this.$data.total = 0;
+            this.$data.chart?.clear();
+            this.showChart();
             if (this.$data.realtime) {
               this.$data.socket = new WebSocket("/ws/realtime");
               this.$data.socket.addEventListener("message", event => {
                 this.$data.logs = [JSON.parse(event.data)].concat(this.$data.logs);
+                this.showChart();
               });
             } else {
               this.$data.socket.close();
               this.$data.socket = null;
+              this.search();
+            }
+          },
+          tabSwitch: function(tab) {
+            this.$data.tab = tab;
+            this.$data.chart?.clear();
+            this.showChart();
+          },
+          changeAxis: function() {
+            this.$data.chart?.clear();
+            this.showChart();
+          },
+          showChart: function() {
+            if (this.$data.tab == 'chart') {
+              var promise = (this.$data.realtime
+                ? Promise.resolve({
+                  ok: true,
+                  json: () => Promise.resolve({docs: this.$data.logs})
+                })
+                : fetch(
+                  `/api/documents?query=${this.getQuery()}`
+                )
+              );
+              promise.then(response => {
+                if (response.ok) {
+                  response.json().then(json => {
+                    var chart = this.$data.chart || echarts.init(this.$refs.chart);
+                    var yaxis = {
+                      format: this.$data.axis[this.$data.yaxis].format,
+                      list: (this.$data.axis[this.$data.yaxis].collect)(json.docs)
+                    };
+                    var xaxis = {
+                      format: this.$data.axis[this.$data.xaxis].format,
+                      list: (this.$data.axis[this.$data.xaxis].collect)(json.docs)
+                    };
+                    if (!this.$data.chart) {
+                      this.$data.chart = chart;
+                      chart.on('dblclick', (event) => {
+                        this.$data.query = `(${this.$data.query}) AND ${this.$data.axis[this.$data.yaxis].query(event.name)} AND ${this.$data.axis[this.$data.xaxis].query(event.seriesName)}`;
+                        this.search();
+                      });
+                    }
+                    var count = {};
+                    for (var y of yaxis.list) {
+                      count[y] = {};
+                      for (var x of xaxis.list) {
+                        count[y][x] = 0;
+                      }
+                    }
+                    for (var log of json.docs) {
+                      count[yaxis.format(log)][xaxis.format(log)]++;
+                    }
+                    option = {
+                      tooltip: {
+                        trigger: 'axis',
+                        axisPointer: {
+                          type: 'shadow'
+                        }
+                      },
+                      legend: {},
+                      xAxis: {
+                        type: 'value'
+                      },
+                      yAxis: {
+                        type: 'category',
+                        data: yaxis.list
+                      },
+                      series: xaxis.list.map(x => {
+                        return  {
+                          name: x,
+                          type: 'bar',
+                          stack: 'total',
+                          label: {
+                            show: true
+                          },
+                          emphasis: {
+                            focus: 'series'
+                          },
+                          data: yaxis.list.map(y => count[y][x])
+                        };
+                      })
+                    };
+                    chart.setOption(option);
+                  });
+                } else {
+                  response.json().then(json => {
+                    this.$data.toast.add({
+                      severity: 'error',
+                      summary: response.statusText,
+                      detail: json.message,
+                    });
+                  });
+                }
+              }).catch(e => {
+                this.$data.toast.add({
+                  severity: 'error',
+                  summary: e,
+                });
+              });
             }
           }
         }
@@ -225,21 +389,41 @@
 
       const app = createApp(root);
 
+      const month = [...Array(12)].map((_, i) => `${i + 1}月`);
+      const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'];
+
       app.use(Config, {
         theme: {
           preset: Themes.Aura
+        },
+        locale: {
+          dayNames: dayOfWeek,
+          dayNamesShort: dayOfWeek,
+          dayNamesMin: dayOfWeek,
+          monthNames: month,
+          monthNamesShort: month
         }
-      }).use(ToastService);
+      }).use(
+        ToastService
+      );
 
       const components = [
         Button,
         Column,
-        ColumnGroup,
         DataTable,
+        DatePicker,
         Dialog,
+        FloatLabel,
         InputText,
+        IftaLabel,
+        MultiSelect,
         PickList,
-        Row,
+        Select,
+        Tab,
+        Tabs,
+        TabList,
+        TabPanel,
+        TabPanels,
         Toast,
         ToggleSwitch,
       ];
