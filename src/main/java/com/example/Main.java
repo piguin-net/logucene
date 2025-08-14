@@ -18,8 +18,10 @@ import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -137,7 +139,9 @@ public class Main
                 staticFiles.location = Location.CLASSPATH;
             });
         }).get(
-            "/api/search", ctx -> ctx.json(search(ctx))
+            "/api/search", ctx -> ctx.json(search(ctx.queryParam("query")))
+        ).get(
+            "/api/hosts", Main::hosts
         ).get(
             "/api/documents", Main::documents
         ).get(
@@ -174,10 +178,10 @@ public class Main
         }};
     }
 
-    private static SearchResult search(Context ctx) throws ParseException, IOException, QueryNodeException {
+    private static SearchResult search(String query) throws ParseException, IOException, QueryNodeException {
         long start = ZonedDateTime.now().toInstant().toEpochMilli();
         SearchResult result = new SearchResult();
-        result.query = ctx.queryParam("query");
+        result.query = query;
         try {
             TopDocs hits = lucene.search(
                 LuceneFieldKeys.message.name(),
@@ -206,9 +210,21 @@ public class Main
         }
     }
 
+    private static void hosts(Context ctx) throws ParseException, IOException, QueryNodeException {
+        SearchResult hits = search("*:*");
+        Set<String> hosts = new HashSet<>();
+        try (LuceneReader reader = lucene.getReader();) {
+            for (int id: hits.ids) {
+                Document doc = reader.get(id);
+                hosts.add(doc.get("host"));
+            }
+        }
+        ctx.json(hosts);
+    }
+
     private static void documents(Context ctx) throws ParseException, IOException, QueryNodeException {
         try {
-            SearchResult hits = search(ctx);
+            SearchResult hits = search(ctx.queryParam("query"));
             Integer first = ctx.queryParam("first") != null ? Integer.valueOf(ctx.queryParam("first")) : 0;
             Integer last = ctx.queryParam("last") != null ? Integer.valueOf(ctx.queryParam("last")) : hits.ids.size();
             List<Integer> ids = hits.ids.subList(
@@ -252,7 +268,7 @@ public class Main
     }
 
     private static void excel(Context ctx) throws IOException, ClassNotFoundException, SQLException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException, ParseException, QueryNodeException {
-        SearchResult hits = search(ctx);
+        SearchResult hits = search(ctx.queryParam("query"));
 
         try (Workbook book = new XSSFWorkbook();) {
             Sheet sheet = book.createSheet();
@@ -287,7 +303,7 @@ public class Main
     }
 
     private static void sqlite(Context ctx) throws IOException, ClassNotFoundException, SQLException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException, ParseException, QueryNodeException {
-        SearchResult hits = search(ctx);
+        SearchResult hits = search(ctx.queryParam("query"));
 
         String clazz = System.getProperty("sqlite.analyzer", "org.apache.lucene.analysis.standard.StandardAnalyzer");
         Analyzer analyzer = (Analyzer) Class.forName(clazz).getDeclaredConstructor().newInstance();
