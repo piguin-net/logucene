@@ -21,7 +21,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -48,6 +47,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.example.LuceneManager.LuceneReader;
+import com.example.SyslogParser.Facility;
+import com.example.SyslogParser.Severity;
 import com.example.SyslogReceiver.LuceneFieldKeys;
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonGenerator;
@@ -141,7 +142,7 @@ public class Main
         }).get(
             "/api/search", ctx -> ctx.json(search(ctx.queryParam("query")))
         ).get(
-            "/api/hosts", Main::hosts
+            "/api/config", Main::config
         ).get(
             "/api/documents", Main::documents
         ).get(
@@ -210,16 +211,21 @@ public class Main
         }
     }
 
-    private static void hosts(Context ctx) throws ParseException, IOException, QueryNodeException {
-        SearchResult hits = search("*:*");
-        Set<String> hosts = new HashSet<>();
-        try (LuceneReader reader = lucene.getReader();) {
-            for (int id: hits.ids) {
-                Document doc = reader.get(id);
-                hosts.add(doc.get("host"));
-            }
-        }
-        ctx.json(hosts);
+    private static void config(Context ctx) throws ParseException, IOException, QueryNodeException {
+        Map<String, Object> result = new HashMap<>() {{
+            SearchResult hits = search("*:*");
+            this.put("facility", Arrays.asList(Facility.values()).stream().map(item -> item.name()).toList());
+            this.put("severity", Arrays.asList(Severity.values()).stream().map(item -> item.name()).toList());
+            this.put("host", new HashSet<>() {{
+                try (LuceneReader reader = lucene.getReader();) {
+                    for (int id: hits.ids) {
+                        Document doc = reader.get(id);
+                        this.add(doc.get("host"));
+                    }
+                }
+            }});
+        }};
+        ctx.json(result);
     }
 
     private static void documents(Context ctx) throws ParseException, IOException, QueryNodeException {

@@ -77,9 +77,10 @@
             </div>
             <div style="display: flex; width: calc(100% - 180px);">
               <DatePicker ref="datePicker" v-model="date" :disabled="realtime" dateFormat="yy-mm-dd" showIcon @update:modelValue="dateSelect" :inputStyle="{'width': '110px'}" />
-              <MultiSelect v-model="host" :disabled="realtime" :options="hosts" style="width: 200px;" filter placeholder="host" :maxSelectedLabels="1" @update:modelValue="search" />
-              <MultiSelect v-model="severity" :disabled="realtime" :options="['unknown','emerg','alert','crit','err','warning','notice','info','debug']" style="width: 200px;" filter placeholder="severity" :maxSelectedLabels="1" @update:modelValue="search" />
-              <InputText type="text" v-model="query" :disabled="realtime" style="width: calc(100% - 731px);" placeholder="Query" @keydown="$event.key == 'Enter' && search()" />
+              <MultiSelect v-model="host" :disabled="realtime" :options="config.host" style="width: 200px;" filter placeholder="host" :maxSelectedLabels="1" @update:modelValue="search" />
+              <MultiSelect v-model="facility" :disabled="realtime" :options="config.facility" style="width: 200px;" filter placeholder="facility" :maxSelectedLabels="1" @update:modelValue="search" />
+              <MultiSelect v-model="severity" :disabled="realtime" :options="config.severity" style="width: 200px;" filter placeholder="severity" :maxSelectedLabels="1" @update:modelValue="search" />
+              <InputText type="text" v-model="query" :disabled="realtime" style="width: calc(100% - 931px);" placeholder="Query" @keydown="$event.key == 'Enter' && search()" />
               <Button severity="success" icon="pi pi-search" :disabled="realtime" @click="search" label="Search" />
               <Button severity="info" icon="pi pi-download" :disabled="realtime" @click="download" />
               <Button severity="help" icon="pi pi-cog" @click="showDialog = true" />
@@ -136,12 +137,12 @@
             </PickList>
             <h3>Chart</h3>
             <div style="display: flex;">
-              <IftaLabel>
-                <Select v-model="yaxis" inputId="yaxis" :options="Object.keys(axis)" @change="changeAxis" />
+              <IftaLabel style="width: 50%;">
+                <Select style="width: 100%;" v-model="yaxis" inputId="yaxis" :options="Object.keys(axis)" @change="changeAxis" />
                 <label for="yaxis">Y-Axis</label>
               </IftaLabel>
-              <IftaLabel>
-                <Select v-model="xaxis" inputId="xaxis" :options="Object.keys(axis)" @change="changeAxis" />
+              <IftaLabel style="width: 50%;">
+                <Select style="width: 100%;" v-model="xaxis" inputId="xaxis" :options="Object.keys(axis)" @change="changeAxis" />
                 <label for="xaxis">X-Axis</label>
               </IftaLabel>
             </div>
@@ -179,23 +180,83 @@
             yaxis: 'host',
             xaxis: 'severity',
             axis: {
-              'day': {query: value => `day:"${value}"`, format: log => log.day, collect: data => [...new Set(data.map(row => row.day))]},
-              'time': {query: value => `time:["${value}:00:00" TO "${value}:59:59"]`, format: log => log.time.slice(0, 2), collect: data => [...Array(24)].map((_, i) => ('0' + i).slice(-2))},
-              'host': {query: value => `host:"${value}"`, format: log => log.host, collect: data => [...new Set(data.map(row => row.host))]},
-              'format': {query: value => `format:"${value}"`, format: log => log.format, collect: data => ['unknown', 'rfc3164', 'rfc5424']},
-              'addr': {query: value => `addr:"${value}"`, format: log => log.addr, collect: data => [...new Set(data.map(row => row.addr))]},
-              'port': {query: value => `port:${value}`, format: log => log.port, collect: data => [...new Set(data.map(row => row.port))]},
-              'facility': {query: value => `facility:"${value}"`, format: log => log.facility, collect: data => [...new Set(data.map(row => row.facility))]},
-              'severity': {query: value => `severity:"${value}"`, format: log => log.severity, collect: data => ['unknown', 'emerg', 'alert', 'crit', 'err', 'warning', 'notice', 'info', 'debug']},
+              'day': {
+                query: value => `day:"${value}"`,
+                format: log => log.day,
+                collect: data => [...new Set(data.map(row => row.day))].sort()
+              },
+              'time': {
+                query: value => `time:["${value}:00:00" TO "${value}:59:59"]`,
+                format: log => log.time.slice(0, 2),
+                collect: data => [...Array(24)].map((_, i) => ('0' + i).slice(-2))
+              },
+              'host': {
+                query: value => `host:"${value}"`,
+                format: log => log.host,
+                collect: data => [...new Set(data.map(row => row.host))].sort()
+              },
+              'format': {
+                query: value => `format:"${value}"`,
+                format: log => log.format,
+                collect: data => ['unknown', 'rfc3164', 'rfc5424']
+              },
+              'addr': {
+                query: value => `addr:"${value}"`,
+                format: log => log.addr,
+                collect: data => [...new Set(data.map(row => row.addr))].sort()
+              },
+              'port': {
+                query: value => `port:${value}`,
+                format: log => log.port,
+                collect: data => [...new Set(data.map(row => row.port))].sort()
+              },
+              'facility': {
+                query: value => `facility:"${value}"`,
+                format: log => log.facility,
+                collect: data => this.$data.config.facility
+              },
+              'severity': {
+                query: value => `severity:"${value}"`,
+                format: log => log.severity,
+                collect: data => this.$data.config.severity
+              },
             },
+            facility: [],
             severity: [],
             host: [],
-            hosts: []
+            config: {
+              host: [],
+              facility: [],
+              severity: [],
+            }
           };
         },
         mounted: function() {
-          this.search();
-          fetch('/api/hosts').then(response => response.json().then(json => this.$data.hosts = json));
+          fetch(
+            '/api/config'
+          ).then(response => {
+            if (response.ok) {
+              response.json().then(json => {
+                this.$data.config.host = json.host;
+                this.$data.config.facility = json.facility;
+                this.$data.config.severity = json.severity;
+                this.search();
+              });
+            } else {
+              response.json().then(json => {
+                this.$data.toast.add({
+                  severity: 'error',
+                  summary: response.statusText,
+                  detail: json.message,
+                });
+              });
+            }
+          }).catch(e => {
+            this.$data.toast.add({
+              severity: 'error',
+              summary: e,
+            });
+          });
         },
         methods: {
           dateSelect: function(event) {
@@ -204,18 +265,21 @@
           getQuery: function() {
             var query = (this.$data.query || '').trim() == ''
               ? '*:*'
-              : `${this.$data.query}`;
+              : `(${this.$data.query})`;
             if (this.$data.date != null) {
               var y = this.$data.date.getFullYear();
               var m = ('0' + (this.$data.date.getMonth() + 1)).slice(-2);
               var d = ('0' + this.$data.date.getDate()).slice(-2);
-              query = `(${query}) AND day:[${y}-${m}-${d} TO ${y}-${m}-${d}]`;
+              query = `${query} AND day:["${y}-${m}-${d}" TO "${y}-${m}-${d}"]`;
             }
             if (this.$data.host.length > 0) {
-              query = `(${query}) AND host:${this.$data.host.join('|')}`;
+              query = `${query} AND host:${this.$data.host.join('|')}`;
             }
             if (this.$data.severity.length > 0) {
-              query = `(${query}) AND severity:${this.$data.severity.join('|')}`;
+              query = `${query} AND severity:${this.$data.severity.join('|')}`;
+            }
+            if (this.$data.facility.length > 0) {
+              query = `${query} AND facility:${this.$data.facility.join('|')}`;
             }
             return encodeURIComponent(query);
           },
