@@ -32,6 +32,7 @@
     <link href="https://cdn.jsdelivr.net/npm/primeicons@7.0.0/primeicons.min.css" rel="stylesheet">
   </head>
   <body>
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.6.7/dist/axios.min.js"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://unpkg.com/primevue/umd/primevue.min.js"></script>
     <script src="https://unpkg.com/@primevue/themes/umd/aura.min.js"></script>
@@ -76,7 +77,7 @@
               <label>RealTimeMode</label>
             </div>
             <div style="display: flex; width: calc(100% - 180px);">
-              <DatePicker ref="datePicker" v-model="date" :disabled="realtime" dateFormat="yy-mm-dd" showIcon @update:modelValue="dateSelect" :inputStyle="{'width': '110px'}" />
+              <DatePicker ref="datePicker" v-model="date" :disabled="realtime" dateFormat="yy-mm-dd" placeholder="day" showIcon @update:modelValue="dateSelect" :inputStyle="{'width': '110px'}" />
               <MultiSelect v-model="host" :disabled="realtime" :options="config.host" style="width: 200px;" filter placeholder="host" :maxSelectedLabels="1" @update:modelValue="search" />
               <MultiSelect v-model="facility" :disabled="realtime" :options="config.facility" style="width: 200px;" filter placeholder="facility" :maxSelectedLabels="1" @update:modelValue="search" />
               <MultiSelect v-model="severity" :disabled="realtime" :options="config.severity" style="width: 200px;" filter placeholder="severity" :maxSelectedLabels="1" @update:modelValue="search" />
@@ -147,9 +148,12 @@
               </IftaLabel>
             </div>
           </Dialog>
+          <div v-if="blocked" style="position: fixed; top: 0px; left: 0px; width: 100%; height: 100%; z-index: 9999; background-color: rgba(0, 0, 0, 0.4);"></div>
         `,
         data: function() {
           return {
+            http: axios.create(),
+            blocked: false,
             date: new Date(),
             query: '*:*',
             fields: [[
@@ -232,26 +236,52 @@
           };
         },
         mounted: function() {
-          fetch(
+          var count = 0;
+          var unblock = () => {
+            return new Promise((resolve, reject) => {
+              count--;
+              if (count <= 0) {
+                count = 0;
+                this.$data.blocked = false;
+              }
+              this.$nextTick(() => resolve());
+            });
+          };
+
+          this.$data.http.interceptors.request.use((config) => {
+            return new Promise((resolve, reject) => {
+              count++;
+              this.$data.blocked = true;
+              this.$nextTick(() => resolve(config));
+            });
+          }, (error) => {
+            return unblock().then(() => Promise.reject(error));
+          });
+
+          this.$data.http.interceptors.response.use((response) => {
+            return unblock().then(() => response);
+          }, (error) => {
+            return unblock().then(
+              () => Promise.reject(error)
+            ).then(() => {
+              console.log(error);
+              this.$data.toast.add({
+                severity: 'error',
+                summary: error,
+              });
+              return Promise.reject(error);
+            });
+          });
+
+          this.$data.http.get(
             '/api/config'
           ).then(response => {
-            if (response.ok) {
-              response.json().then(json => {
-                this.$data.config.host = json.host;
-                this.$data.config.facility = json.facility;
-                this.$data.config.severity = json.severity;
-                this.search();
-              });
-            } else {
-              response.json().then(json => {
-                this.$data.toast.add({
-                  severity: 'error',
-                  summary: response.statusText,
-                  detail: json.message,
-                });
-              });
-            }
-          }).catch(e => {
+            this.$data.config.host     = response.data.host;
+            this.$data.config.facility = response.data.facility;
+            this.$data.config.severity = response.data.severity;
+          }).then(
+            () => this.search()
+          ).catch(e => {
             this.$data.toast.add({
               severity: 'error',
               summary: e,
@@ -263,9 +293,7 @@
             this.search();
           },
           getQuery: function() {
-            var query = (this.$data.query || '').trim() == ''
-              ? '*:*'
-              : `(${this.$data.query})`;
+            var query = `(${this.$data.query?.trim() || '*:*'})`;
             if (this.$data.date != null) {
               var y = this.$data.date.getFullYear();
               var m = ('0' + (this.$data.date.getMonth() + 1)).slice(-2);
@@ -287,44 +315,35 @@
             this.$data.logs = [];
             this.$data.total = 0;
             this.$data.first = 0;
-            this.pageChange({first: 0, rows: this.$data.rows}, true);
-            this.showChart();
+            return Promise.resolve().then(
+              () => this.pageChange({first: 0, rows: this.$data.rows}, true)
+            ).then(
+              () => this.showChart()
+            );
           },
           pageChange: function(event, showToast) {
             this.$data.rows = event.rows;
             this.$data.first = event.first;
-            fetch(
+            return this.$data.http.get(
               `/api/documents?query=${this.getQuery()}`
               + `&first=${event.first}`
               + `&last=${event.first + event.rows}`
             ).then(response => {
-              if (response.ok) {
-                response.json().then(json => {
-                  this.$data.logs = json.docs;
-                  this.$data.total = json.total;
-                  if (this.$data.total > 0) {
-                    if (showToast) {
-                      this.$data.toast.add({
-                        severity: 'info',
-                        summary: `${this.$data.total.toLocaleString()} hits.(${json.ms.toLocaleString()}ms)`,
-                        life: 5000,
-                      });
-                    }
-                  } else {
-                    this.$data.toast.add({
-                      severity: 'warn',
-                      summary: `not found.`,
-                      life: 5000,
-                    });
-                  }
-                });
-              } else {
-                response.json().then(json => {
+              this.$data.logs  = response.data.docs;
+              this.$data.total = response.data.total;
+              if (this.$data.total > 0) {
+                if (showToast) {
                   this.$data.toast.add({
-                    severity: 'error',
-                    summary: response.statusText,
-                    detail: json.message,
+                    severity: 'info',
+                    summary: `${this.$data.total.toLocaleString()} hits.(${response.data.ms.toLocaleString()}ms)`,
+                    life: 5000,
                   });
+                }
+              } else {
+                this.$data.toast.add({
+                  severity: 'warn',
+                  summary: `not found.`,
+                  life: 5000,
                 });
               }
             }).catch(e => {
@@ -369,91 +388,76 @@
           showChart: function() {
             if (this.$data.tab == 'chart') {
               var promise = (this.$data.realtime
-                ? Promise.resolve({
-                  ok: true,
-                  json: () => Promise.resolve({docs: this.$data.logs})
-                })
-                : fetch(
-                  `/api/documents?query=${this.getQuery()}`
-                )
+                ? Promise.resolve({data: {docs: this.$data.logs}})
+                : this.$data.http.get(`/api/documents?query=${this.getQuery()}`)
               );
-              promise.then(response => {
-                if (response.ok) {
-                  response.json().then(json => {
-                    var chart = this.$data.chart || echarts.init(this.$refs.chart);
-                    var yaxis = {
-                      format: this.$data.axis[this.$data.yaxis].format,
-                      list: (this.$data.axis[this.$data.yaxis].collect)(json.docs)
-                    };
-                    var xaxis = {
-                      format: this.$data.axis[this.$data.xaxis].format,
-                      list: (this.$data.axis[this.$data.xaxis].collect)(json.docs)
-                    };
-                    if (!this.$data.chart) {
-                      this.$data.chart = chart;
-                      chart.on('dblclick', (event) => {
-                        this.$data.query = `(${this.$data.query}) AND ${this.$data.axis[this.$data.yaxis].query(event.name)} AND ${this.$data.axis[this.$data.xaxis].query(event.seriesName)}`;
-                        this.search();
-                        this.$data.tab = 'table';
-                      });
-                    }
-                    var count = {};
-                    for (var y of yaxis.list) {
-                      count[y] = {};
-                      for (var x of xaxis.list) {
-                        count[y][x] = 0;
-                      }
-                    }
-                    for (var log of json.docs) {
-                      count[yaxis.format(log)][xaxis.format(log)]++;
-                    }
-                    option = {
-                      tooltip: {
-                        trigger: 'axis',
-                        axisPointer: {
-                          type: 'shadow'
-                        }
-                      },
-                      legend: {},
-                      xAxis: {
-                        type: 'value'
-                      },
-                      yAxis: {
-                        type: 'category',
-                        data: yaxis.list
-                      },
-                      series: xaxis.list.map(x => {
-                        return  {
-                          name: x,
-                          type: 'bar',
-                          stack: 'total',
-                          label: {
-                            show: true
-                          },
-                          emphasis: {
-                            focus: 'series'
-                          },
-                          data: yaxis.list.map(y => count[y][x])
-                        };
-                      })
-                    };
-                    chart.setOption(option);
-                  });
-                } else {
-                  response.json().then(json => {
-                    this.$data.toast.add({
-                      severity: 'error',
-                      summary: response.statusText,
-                      detail: json.message,
-                    });
+              return promise.then(response => {
+                var chart = this.$data.chart || echarts.init(this.$refs.chart);
+                var yaxis = {
+                  format: this.$data.axis[this.$data.yaxis].format,
+                  list: (this.$data.axis[this.$data.yaxis].collect)(response.data.docs)
+                };
+                var xaxis = {
+                  format: this.$data.axis[this.$data.xaxis].format,
+                  list: (this.$data.axis[this.$data.xaxis].collect)(response.data.docs)
+                };
+                if (!this.$data.chart) {
+                  this.$data.chart = chart;
+                  chart.on('dblclick', (event) => {
+                    this.$data.query = `(${this.$data.query?.trim() || '*:*'}) AND ${this.$data.axis[this.$data.yaxis].query(event.name)} AND ${this.$data.axis[this.$data.xaxis].query(event.seriesName)}`;
+                    this.search();
+                    this.$data.tab = 'table';
                   });
                 }
+                var count = {};
+                for (var y of yaxis.list) {
+                  count[y] = {};
+                  for (var x of xaxis.list) {
+                    count[y][x] = 0;
+                  }
+                }
+                for (var log of response.data.docs) {
+                  count[yaxis.format(log)][xaxis.format(log)]++;
+                }
+                option = {
+                  tooltip: {
+                    trigger: 'axis',
+                    axisPointer: {
+                      type: 'shadow'
+                    }
+                  },
+                  legend: {},
+                  xAxis: {
+                    type: 'value'
+                  },
+                  yAxis: {
+                    type: 'category',
+                    data: yaxis.list
+                  },
+                  series: xaxis.list.map(x => {
+                    return  {
+                      name: x,
+                      type: 'bar',
+                      stack: 'total',
+                      label: {
+                        show: true
+                      },
+                      emphasis: {
+                        focus: 'series'
+                      },
+                      data: yaxis.list.map(y => count[y][x])
+                    };
+                  })
+                };
+                chart.setOption(option);
               }).catch(e => {
                 this.$data.toast.add({
                   severity: 'error',
                   summary: e,
                 });
-              });
+              })
+            } else {
+              return Promise.resolve();
             }
           }
         }
