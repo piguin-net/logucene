@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import java.util.zip.GZIPOutputStream;
 
 import javax.script.ScriptEngine;
 import javax.script.ScriptEngineManager;
@@ -240,7 +241,7 @@ public class Main
                     : last
             );
             PipedInputStream pin = new PipedInputStream();
-            PipedOutputStream pout = new PipedOutputStream(pin);
+            GZIPOutputStream pout = new GZIPOutputStream(new PipedOutputStream(pin));
             new Thread(() -> {
                 try (JsonGenerator json = new JsonFactory().createGenerator(pout);) {
                     json.writeStartObject();
@@ -267,7 +268,13 @@ public class Main
                     throw new RuntimeException(e);
                 }
             }).start();
-            ctx.result(pin);
+            ctx.contentType(
+                "application/json"
+            ).header(
+                "Content-Encoding", "gzip"
+            ).result(
+                pin
+            );
         } catch (IndexNotFoundException e) {
             logger.atWarn().log("index not found.");
         }
