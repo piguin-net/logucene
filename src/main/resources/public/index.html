@@ -56,7 +56,6 @@
         DataTable,
         DatePicker,
         Dialog,
-        FloatLabel,
         InputText,
         IftaLabel,
         MultiSelect,
@@ -116,7 +115,7 @@
           <Tabs :value="tab" @update:value="tabSwitch" style="padding: 10px 10px 0 10px;">
             <TabList>
               <Tab value="table">Table</Tab>
-              <Tab value="barchart">BarChart</Tab>
+              <Tab value="barchart">Chart</Tab>
             </TabList>
             <TabPanels>
               <TabPanel value="table">
@@ -124,6 +123,7 @@
                   <SplitterPanel :size="20" :minSize="10">
                     <Tree
                       :value="tree.value"
+                      :loading="realtime"
                       v-model:selectionKeys="tree.selectedKeys"
                       selectionMode="single"
                       style="height: 100%;"
@@ -181,30 +181,36 @@
             </TabPanels>
           </Tabs>
           <Dialog v-model:visible="showDialog" modal header="Config">
-            <h3>Table</h3>
-            <PickList v-model="table.fields" dataKey="name">
-              <template v-slot:sourceheader>
-                <label style="font-weight: bold;">Show</label>
-              </template>
-              <template v-slot:targetheader>
-                <label style="font-weight: bold;">Hidden</label>
-              </template>
-              <template #option="{ option }">
-                <label style="width: 100px;">{{ option.name }}</label>
-              </template>
-            </PickList>
-            <h3>DrillDown</h3>
-            <PickList v-model="tree.drilldown" @update:modelValue="changeDrilldown">
-              <template v-slot:sourceheader>
-                <label style="font-weight: bold;">Enable</label>
-              </template>
-              <template v-slot:targetheader>
-                <label style="font-weight: bold;">Disable</label>
-              </template>
-              <template #option="{ option }">
-                <label style="width: 100px;">{{ option }}</label>
-              </template>
-            </PickList>
+            <div style="display: flex; width: 1000px; justify-content: space-around;">
+              <div>
+                <h3>Table</h3>
+                <PickList v-model="table.fields" dataKey="name">
+                  <template v-slot:sourceheader>
+                    <label style="font-weight: bold;">Show</label>
+                  </template>
+                  <template v-slot:targetheader>
+                    <label style="font-weight: bold;">Hidden</label>
+                  </template>
+                  <template #option="{ option }">
+                    <label style="width: 100px;">{{ option.name }}</label>
+                  </template>
+                </PickList>
+              </div>
+              <div>
+                <h3>DrillDown</h3>
+                <PickList v-model="tree.drilldown" @update:modelValue="changeDrilldown">
+                  <template v-slot:sourceheader>
+                    <label style="font-weight: bold;">Enable</label>
+                  </template>
+                  <template v-slot:targetheader>
+                    <label style="font-weight: bold;">Disable</label>
+                  </template>
+                  <template #option="{ option }">
+                    <label style="width: 100px;">{{ option }}</label>
+                  </template>
+                </PickList>
+              </div>
+            </div>
           </Dialog>
           <div v-if="blocked" style="position: fixed; top: 0px; left: 0px; width: 100%; height: 100%; z-index: 9999; background-color: rgba(0, 0, 0, 0.4);"></div>
         `,
@@ -416,6 +422,8 @@
             this.$data.condition.facility = [];
             this.$data.condition.severity = [];
             this.$data.condition.query = '*:*';
+            this.$data.tree.selected = null;
+            this.$data.tree.selectedKeys = [];
             this.search();
           },
           dateSelect: function(event) {
@@ -516,11 +524,23 @@
             this.$data.table.logs = [];
             this.$data.table.total = 0;
             this.$data.barchart.instance?.clear();
+            this.$data.tree.selected = null;
+            this.$data.tree.selectedKeys = [];
+            this.$data.tree.value = [{
+              key: null,
+              label: '-',
+              data: {
+                'subtotal': 0,
+                'count': 0
+              },
+              leaf: true
+            }];
             this.showChart();
             if (this.$data.realtime) {
               this.$data.socket = new WebSocket("/ws/realtime");
               this.$data.socket.addEventListener("message", event => {
                 this.$data.table.logs = [JSON.parse(event.data)].concat(this.$data.table.logs);
+                this.$data.tree.value[0].data.count++;
                 this.showChart();
               });
             } else {
@@ -539,9 +559,11 @@
             this.showChart();
           },
           changeDrilldown: function() {
-            this.$data.tree.selected = null;
-            this.$data.tree.selectedKeys = [];
-            this.search();
+            if (!this.$data.realtime) {
+              this.$data.tree.selected = null;
+              this.$data.tree.selectedKeys = [];
+              this.search();
+            }
           },
           showChart: function() {
             if (this.$data.tab == 'barchart') {
@@ -652,7 +674,6 @@
         DataTable,
         DatePicker,
         Dialog,
-        FloatLabel,
         InputText,
         IftaLabel,
         MultiSelect,
