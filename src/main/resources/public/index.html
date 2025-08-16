@@ -4,6 +4,8 @@
     <title>logucene</title>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width" />
+    <!-- <link href="https://cdn.jsdelivr.net/npm/primeicons@7.0.0/primeicons.min.css" rel="stylesheet"> -->
+    <link href="/webjars/primeicons/7.0.0/primeicons.css" rel="stylesheet">
     <style>
       body {
         margin: 0;
@@ -29,14 +31,18 @@
         white-space: nowrap;
       }
     </style>
-    <link href="https://cdn.jsdelivr.net/npm/primeicons@7.0.0/primeicons.min.css" rel="stylesheet">
   </head>
   <body>
-    <script src="https://cdn.jsdelivr.net/npm/axios@1.6.7/dist/axios.min.js"></script>
-    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-    <script src="https://unpkg.com/primevue/umd/primevue.min.js"></script>
-    <script src="https://unpkg.com/@primevue/themes/umd/aura.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/echarts@6.0.0/dist/echarts.min.js"></script>
+    <!-- <script src="https://cdn.jsdelivr.net/npm/axios@1.6.7/dist/axios.min.js"></script> -->
+    <script src="/webjars/axios/1.11.0/dist/axios.min.js"></script>
+    <!-- <script src="https://cdn.jsdelivr.net/npm/echarts@6.0.0/dist/echarts.min.js"></script> -->
+    <script src="/webjars/echarts/6.0.0/dist/echarts.min.js"></script>
+    <!-- <script src="https://cdn.jsdelivr.net/npm/vue@3.5.18/dist/vue.global.min.js"></script> -->
+    <script src="/webjars/vue/3.5.18/dist/vue.global.prod.js"></script>
+    <!-- <script src="https://cdn.jsdelivr.net/npm/primevue@4.3.7/umd/primevue.min.js"></script> -->
+    <script src="/webjars/primevue/4.3.3/umd/primevue.min.js"></script>
+    <!-- <script src="https://cdn.jsdelivr.net/npm/@primevue/themes@4.3.3/umd/nora.min.js"></script> -->
+    <script src="/webjars/primevue__themes/4.3.3/umd/nora.min.js"></script>
 
     <div id="app">
     </div>
@@ -470,7 +476,7 @@
 
       app.use(Config, {
         theme: {
-          preset: Themes.Aura
+          preset: Themes.Nora
         },
         locale: {
           dayNames: dayOfWeek,

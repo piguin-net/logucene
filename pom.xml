@@ -92,6 +92,78 @@
       <artifactId>sqlite-jdbc</artifactId>
       <version>3.50.3.0</version>
     </dependency>
+    <!-- https://mvnrepository.com/artifact/org.webjars.npm/primeicons -->
+    <dependency>
+      <groupId>org.webjars.npm</groupId>
+      <artifactId>primeicons</artifactId>
+      <version>7.0.0</version>
+      <exclusions>
+        <exclusion>
+          <groupId>*</groupId>
+          <artifactId>*</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <!-- https://mvnrepository.com/artifact/org.webjars.npm/axios -->
+    <dependency>
+      <groupId>org.webjars.npm</groupId>
+      <artifactId>axios</artifactId>
+      <version>1.11.0</version>
+      <exclusions>
+        <exclusion>
+          <groupId>*</groupId>
+          <artifactId>*</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <!-- https://mvnrepository.com/artifact/org.webjars.npm/echarts -->
+    <dependency>
+      <groupId>org.webjars.npm</groupId>
+      <artifactId>echarts</artifactId>
+      <version>6.0.0</version>
+      <exclusions>
+        <exclusion>
+          <groupId>*</groupId>
+          <artifactId>*</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <!-- https://mvnrepository.com/artifact/org.webjars.npm/vue -->
+    <dependency>
+      <groupId>org.webjars.npm</groupId>
+      <artifactId>vue</artifactId>
+      <version>3.5.18</version>
+      <exclusions>
+        <exclusion>
+          <groupId>*</groupId>
+          <artifactId>*</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <!-- https://mvnrepository.com/artifact/org.webjars.npm/primevue -->
+    <dependency>
+      <groupId>org.webjars.npm</groupId>
+      <artifactId>primevue</artifactId>
+      <version>4.3.3</version>
+      <exclusions>
+        <exclusion>
+          <groupId>*</groupId>
+          <artifactId>*</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <!-- https://mvnrepository.com/artifact/org.webjars.npm/primevue__themes -->
+    <dependency>
+      <groupId>org.webjars.npm</groupId>
+      <artifactId>primevue__themes</artifactId>
+      <version>4.3.3</version>
+      <exclusions>
+        <exclusion>
+          <groupId>*</groupId>
+          <artifactId>*</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
   </dependencies>
 
   <build>
