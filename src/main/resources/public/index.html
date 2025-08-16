@@ -112,32 +112,32 @@
               <Button severity="help" icon="pi pi-cog" @click="showDialog = true" />
             </div>
           </div>
-          <Tabs :value="tab" @update:value="tabSwitch" style="padding: 10px 10px 0 10px;">
-            <TabList>
-              <Tab value="table">Table</Tab>
-              <Tab value="barchart">Chart</Tab>
-            </TabList>
-            <TabPanels>
-              <TabPanel value="table">
-                <Splitter style="height: 100%;">
-                  <SplitterPanel :size="20" :minSize="10">
-                    <Tree
-                      :value="tree.value"
-                      :loading="realtime"
-                      v-model:selectionKeys="tree.selectedKeys"
-                      selectionMode="single"
-                      style="height: 100%;"
-                      @nodeSelect="treeSelect"
-                      @nodeUnselect="treeUnselect"
-                      @nodeExpand="treeExpand"
-                    >
-                      <template #default="slotProps">
-                        <label>{{ slotProps.node.label }}({{ slotProps.node.data.count.toLocaleString() }})</label>
-                        <div><progress :max="slotProps.node.data.subtotal" :value="slotProps.node.data.count"></progress></div>
-                      </template>
-                    </Tree>
-                  </SplitterPanel>
-                  <SplitterPanel :size="80">
+          <Splitter style="height: 100%;">
+            <SplitterPanel :size="20" :minSize="10">
+              <Tree
+                :value="tree.value"
+                :loading="realtime"
+                v-model:selectionKeys="tree.selectedKeys"
+                selectionMode="single"
+                style="height: 100%;"
+                @nodeSelect="treeSelect"
+                @nodeUnselect="treeUnselect"
+                @nodeExpand="treeExpand"
+              >
+                <template #default="slotProps">
+                  <label>{{ slotProps.node.label }}({{ slotProps.node.data.count.toLocaleString() }})</label>
+                  <div><progress :max="slotProps.node.data.subtotal" :value="slotProps.node.data.count"></progress></div>
+                </template>
+              </Tree>
+            </SplitterPanel>
+            <SplitterPanel :size="80">
+              <Tabs :value="tab" @update:value="tabSwitch" style="padding: 10px 10px 0 10px;">
+                <TabList>
+                  <Tab value="table">Table</Tab>
+                  <Tab value="barchart">Chart</Tab>
+                </TabList>
+                <TabPanels>
+                  <TabPanel value="table">
                     <DataTable
                       ref="table"
                       showGridlines
@@ -165,24 +165,24 @@
                       ></Column>
                       <template #empty> no data. </template>
                     </DataTable>
-                  </SplitterPanel>
-                </Splitter>
-              </TabPanel>
-              <TabPanel value="barchart">
-                <div style="display: flex;">
-                  <IftaLabel style="width: 50%;">
-                    <Select style="width: 100%;" v-model="barchart.yaxis" inputId="yaxis" :options="Object.keys(axis)" @change="changeAxis" />
-                    <label for="yaxis">Y-Axis</label>
-                  </IftaLabel>
-                  <IftaLabel style="width: 50%;">
-                    <Select style="width: 100%;" v-model="barchart.xaxis" inputId="xaxis" :options="Object.keys(axis)" @change="changeAxis" />
-                    <label for="xaxis">X-Axis</label>
-                  </IftaLabel>
-                </div>
-                <div ref="barchart" style="height: calc(100% - 58px);"></div>
-              </TabPanel>
-            </TabPanels>
-          </Tabs>
+                  </TabPanel>
+                  <TabPanel value="barchart">
+                    <div style="display: flex;">
+                      <IftaLabel style="width: 50%;">
+                        <Select style="width: 100%;" v-model="barchart.yaxis" inputId="yaxis" :options="Object.keys(axis)" @change="changeAxis" />
+                        <label for="yaxis">Y-Axis</label>
+                      </IftaLabel>
+                      <IftaLabel style="width: 50%;">
+                        <Select style="width: 100%;" v-model="barchart.xaxis" inputId="xaxis" :options="Object.keys(axis)" @change="changeAxis" />
+                        <label for="xaxis">X-Axis</label>
+                      </IftaLabel>
+                    </div>
+                    <div ref="barchart" style="height: calc(100% - 58px);"></div>
+                  </TabPanel>
+                </TabPanels>
+              </Tabs>
+            </SplitterPanel>
+          </Splitter>
           <Dialog v-model:visible="showDialog" modal header="Config">
             <div style="display: flex; width: 1000px; justify-content: space-around;">
               <div>
@@ -382,11 +382,19 @@
         methods: {
           treeSelect: function(node) {
             this.$data.tree.selected = node;
-            this.pageChange();
+            if (this.$data.tab == 'table') {
+              this.pageChange();
+            } else {
+              this.showChart();
+            }
           },
           treeUnselect: function(node) {
             this.$data.tree.selected = null;
-            this.pageChange();
+            if (this.$data.tab == 'table') {
+              this.pageChange();
+            } else {
+              this.showChart();
+            }
           },
           treeExpand: function(node) {
             var axis = [...node.data.axis];
