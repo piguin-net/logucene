@@ -88,23 +88,23 @@
             </div>
             <div style="display: flex; width: calc(100% - 100px);">
               <IftaLabel>
-                <DatePicker ref="datePicker" v-model="date" inputId="day" :disabled="realtime" dateFormat="yy-mm-dd" showIcon @update:modelValue="dateSelect" :inputStyle="{'width': '110px'}" />
+                <DatePicker ref="datePicker" v-model="condition.date" inputId="day" :disabled="realtime" dateFormat="yy-mm-dd" showIcon @update:modelValue="dateSelect" :inputStyle="{'width': '110px'}" />
                 <label for="day">Day</label>
               </IftaLabel>
               <IftaLabel>
-                <MultiSelect v-model="host" inputId="host" :disabled="realtime" :options="config.host" style="width: 150px;" filter :maxSelectedLabels="1" @update:modelValue="search" />
+                <MultiSelect v-model="condition.host" inputId="host" :disabled="realtime" :options="config.host" style="width: 150px;" filter :maxSelectedLabels="1" @update:modelValue="search" />
                 <label for="host">Host</label>
               </IftaLabel>
               <IftaLabel>
-                <MultiSelect v-model="facility" inputId="facility" :disabled="realtime" :options="config.facility" style="width: 150px;" filter :maxSelectedLabels="1" @update:modelValue="search" />
+                <MultiSelect v-model="condition.facility" inputId="facility" :disabled="realtime" :options="config.facility" style="width: 150px;" filter :maxSelectedLabels="1" @update:modelValue="search" />
                 <label for="facility">Facility</label>
               </IftaLabel>
               <IftaLabel>
-                <MultiSelect v-model="severity" inputId="severity" :disabled="realtime" :options="config.severity" style="width: 150px;" filter :maxSelectedLabels="1" @update:modelValue="search" />
+                <MultiSelect v-model="condition.severity" inputId="severity" :disabled="realtime" :options="config.severity" style="width: 150px;" filter :maxSelectedLabels="1" @update:modelValue="search" />
                 <label for="severity">Severity</label>
               </IftaLabel>
               <IftaLabel style="width: calc(100% - 760px);">
-                <InputText type="text" v-model="query" inputId="query" :disabled="realtime" style="width: 100%;" @keydown="$event.key == 'Enter' && search()" />
+                <InputText type="text" v-model="condition.query" inputId="query" :disabled="realtime" style="width: 100%;" @keydown="$event.key == 'Enter' && search()" />
                 <label for="query">Query</label>
               </IftaLabel>
               <Button v-tooltip.bottom="'Search'" severity="success" icon="pi pi-search" :disabled="realtime" @click="search" />
@@ -121,7 +121,7 @@
             <TabPanels>
               <TabPanel value="table">
                 <Splitter style="height: 100%;">
-                  <SplitterPanel :size="15" :minSize="10">
+                  <SplitterPanel :size="20" :minSize="10">
                     <Tree
                       :value="tree.value"
                       v-model:selectionKeys="tree.selectedKeys"
@@ -137,25 +137,25 @@
                       </template>
                     </Tree>
                   </SplitterPanel>
-                  <SplitterPanel :size="85">
+                  <SplitterPanel :size="80">
                     <DataTable
                       ref="table"
                       showGridlines
                       scrollable
                       paginator
                       :lazy="true"
-                      :totalRecords="total"
-                      :first="first"
-                      :rows="rows"
+                      :totalRecords="table.total"
+                      :first="table.first"
+                      :rows="table.rows"
                       :rowsPerPageOptions="[100, 300, 500, 1000]"
-                      :value="logs"
+                      :value="table.logs"
                       scrollHeight="100%"
                       :virtualScrollerOptions="{ itemSize: 49 }"
                       @page="pageChange"
                       style="padding: 10px;"
                     >
                       <Column
-                        v-for="field in fields[0]"
+                        v-for="field in table.fields[0]"
                         :field="field.name"
                         :header="field.name"
                         :headerStyle="{'background-color': 'lightgray'}"
@@ -168,11 +168,11 @@
               <TabPanel value="barchart">
                 <div style="display: flex;">
                   <IftaLabel style="width: 50%;">
-                    <Select style="width: 100%;" v-model="yaxis" inputId="yaxis" :options="Object.keys(axis)" @change="changeAxis" />
+                    <Select style="width: 100%;" v-model="barchart.yaxis" inputId="yaxis" :options="Object.keys(axis)" @change="changeAxis" />
                     <label for="yaxis">Y-Axis</label>
                   </IftaLabel>
                   <IftaLabel style="width: 50%;">
-                    <Select style="width: 100%;" v-model="xaxis" inputId="xaxis" :options="Object.keys(axis)" @change="changeAxis" />
+                    <Select style="width: 100%;" v-model="barchart.xaxis" inputId="xaxis" :options="Object.keys(axis)" @change="changeAxis" />
                     <label for="xaxis">X-Axis</label>
                   </IftaLabel>
                 </div>
@@ -182,7 +182,7 @@
           </Tabs>
           <Dialog v-model:visible="showDialog" modal header="Config">
             <h3>Table</h3>
-            <PickList v-model="fields" dataKey="name">
+            <PickList v-model="table.fields" dataKey="name">
               <template v-slot:sourceheader>
                 <label style="font-weight: bold;">Show</label>
               </template>
@@ -194,7 +194,7 @@
               </template>
             </PickList>
             <h3>DrillDown</h3>
-            <PickList v-model="drilldown" @update:modelValue="changeDrilldown">
+            <PickList v-model="tree.drilldown" @update:modelValue="changeDrilldown">
               <template v-slot:sourceheader>
                 <label style="font-weight: bold;">Enable</label>
               </template>
@@ -212,36 +212,45 @@
           return {
             http: axios.create(),
             blocked: false,
-            date: null,
-            // TODO: multiple
-            query: '*:*',
-            fields: [[
-              {name: 'day'},
-              {name: 'time'},
-              {name: 'host'},
-              {name: 'facility'},
-              {name: 'severity'},
-              {name: 'message'},
-            ], [
-              // {name: 'id'},
-              {name: 'format'},
-              {name: 'timestamp'},
-              {name: 'addr'},
-              {name: 'port'},
-              {name: 'raw'},
-            ]],
-            logs: [],
-            total: 0,
-            first: 0,
-            rows: 100,
             toast: useToast(),
             showDialog: false,
             socket: null,
             realtime: false,
             tab: 'table',
-            barchart: null,
-            yaxis: 'host',
-            xaxis: 'severity',
+            config: {
+              host: [],
+              facility: [],
+              severity: [],
+            },
+            condition: {
+              date: null,
+              host: [],
+              facility: [],
+              severity: [],
+              // TODO: multiple
+              query: '*:*',
+            },
+            table: {
+              fields: [[
+                {name: 'day'},
+                {name: 'time'},
+                {name: 'host'},
+                {name: 'facility'},
+                {name: 'severity'},
+                {name: 'message'},
+              ], [
+                // {name: 'id'},
+                {name: 'format'},
+                {name: 'timestamp'},
+                {name: 'addr'},
+                {name: 'port'},
+                {name: 'raw'},
+              ]],
+              logs: [],
+              total: 0,
+              first: 0,
+              rows: 100,
+            },
             axis: {
               'day': {
                 query: value => `day:["${value}" TO "${value}"]`,
@@ -284,29 +293,26 @@
                 collect: data => this.$data.config.severity
               },
             },
-            drilldown: [[
-              'severity',
-              'host',
-            ],[
-              'day',
-              'time',
-              'format',
-              'addr',
-              'port',
-              'facility',
-            ]],
-            facility: [],
-            severity: [],
-            host: [],
-            config: {
-              host: [],
-              facility: [],
-              severity: [],
+            barchart: {
+              instance: null,
+              yaxis: 'host',
+              xaxis: 'severity',
             },
             tree: {
               value: [],
               selectedKeys: [],
               selected: null,
+              drilldown: [[
+                'severity',
+                'host',
+              ],[
+                'day',
+                'time',
+                'format',
+                'addr',
+                'port',
+                'facility',
+              ]],
             }
           };
         },
@@ -406,34 +412,38 @@
           },
           clearFilter: function() {
             this.$data.day = null;
-            this.$data.host = [];
-            this.$data.facility = [];
-            this.$data.severity = [];
-            this.$data.query = '*:*';
+            this.$data.condition.host = [];
+            this.$data.condition.facility = [];
+            this.$data.condition.severity = [];
+            this.$data.condition.query = '*:*';
             this.search();
           },
           dateSelect: function(event) {
             this.search();
           },
           getQuery: function(node, query) {
-            query = `(${query || this.$data.query?.trim() || '*:*'})`;
-            if (this.$data.date != null) {
-              var y = this.$data.date.getFullYear();
-              var m = ('0' + (this.$data.date.getMonth() + 1)).slice(-2);
-              var d = ('0' + this.$data.date.getDate()).slice(-2);
+            query = `(${query || this.$data.condition.query?.trim() || '*:*'})`;
+            if (this.$data.condition.date != null) {
+              var y = this.$data.condition.date.getFullYear();
+              var m = ('0' + (this.$data.condition.date.getMonth() + 1)).slice(-2);
+              var d = ('0' + this.$data.condition.date.getDate()).slice(-2);
               query = `${query} AND day:["${y}-${m}-${d}" TO "${y}-${m}-${d}"]`;
             }
-            if (this.$data.host.length > 0) {
-              query = `${query} AND host:${this.$data.host.join('|')}`;
+            if (this.$data.condition.host.length > 0) {
+              query = `${query} AND host:${this.$data.condition.host.join('|')}`;
             }
-            if (this.$data.severity.length > 0) {
-              query = `${query} AND severity:${this.$data.severity.join('|')}`;
+            if (this.$data.condition.severity.length > 0) {
+              query = `${query} AND severity:${this.$data.condition.severity.join('|')}`;
             }
-            if (this.$data.facility.length > 0) {
-              query = `${query} AND facility:${this.$data.facility.join('|')}`;
+            if (this.$data.condition.facility.length > 0) {
+              query = `${query} AND facility:${this.$data.condition.facility.join('|')}`;
             }
             if (node) {
-              query = `${query} AND ${node.data.key}:${node.data.value}`;
+              if (node.data.key in this.$data.axis) {
+                query = `${query} AND ${this.$data.axis[node.data.key].query(node.data.value)}`;
+              } else {
+                query = `${query} AND ${node.data.key}:"${node.data.value}"`;
+              }
               if (node.parent) {
                 query = this.getQuery(node.parent, query);
               }
@@ -442,11 +452,11 @@
           },
           // TODO: 削除
           search: function(event) {
-            this.$data.logs = [];
-            this.$data.total = 0;
-            this.$data.first = 0;
+            this.$data.table.logs = [];
+            this.$data.table.total = 0;
+            this.$data.table.first = 0;
             return Promise.resolve().then(
-              () => this.pageChange({first: 0, rows: this.$data.rows}, true)
+              () => this.pageChange({first: 0, rows: this.$data.table.rows}, true)
             ).then(
               () => this.showChart()
             ).then(() => {
@@ -456,29 +466,29 @@
                 data: {
                   'key': '*',
                   'value': '*',
-                  'subtotal': this.$data.total,
-                  'count': this.$data.total,
-                  'axis': [...this.$data.drilldown[0]]
+                  'subtotal': this.$data.table.total,
+                  'count': this.$data.table.total,
+                  'axis': [...this.$data.tree.drilldown[0]]
                 },
                 leaf: false
               }];
             });
           },
           pageChange: function(event, showToast) {
-            this.$data.rows = event?.rows || this.$data.rows;
-            this.$data.first = event?.first || 0;
+            this.$data.table.rows = event?.rows || this.$data.table.rows;
+            this.$data.table.first = event?.first || 0;
             return this.$data.http.get(
               `/api/documents?query=${encodeURIComponent(this.getQuery(this.$data.tree.selected))}`
-              + `&first=${this.$data.first}`
-              + `&last=${this.$data.first + this.$data.rows}`
+              + `&first=${this.$data.table.first}`
+              + `&last=${this.$data.table.first + this.$data.table.rows}`
             ).then(response => {
-              this.$data.logs  = response.data.docs;
-              this.$data.total = response.data.total;
-              if (this.$data.total > 0) {
+              this.$data.table.logs  = response.data.docs;
+              this.$data.table.total = response.data.total;
+              if (this.$data.table.total > 0) {
                 if (showToast) {
                   this.$data.toast.add({
                     severity: 'info',
-                    summary: `${this.$data.total.toLocaleString()} hits.(${response.data.ms.toLocaleString()}ms)`,
+                    summary: `${this.$data.table.total.toLocaleString()} hits.(${response.data.ms.toLocaleString()}ms)`,
                     life: 5000,
                   });
                 }
@@ -503,14 +513,14 @@
             a.click();
           },
           switchRealTimeMode() {
-            this.$data.logs = [];
-            this.$data.total = 0;
-            this.$data.barchart?.clear();
+            this.$data.table.logs = [];
+            this.$data.table.total = 0;
+            this.$data.barchart.instance?.clear();
             this.showChart();
             if (this.$data.realtime) {
               this.$data.socket = new WebSocket("/ws/realtime");
               this.$data.socket.addEventListener("message", event => {
-                this.$data.logs = [JSON.parse(event.data)].concat(this.$data.logs);
+                this.$data.table.logs = [JSON.parse(event.data)].concat(this.$data.table.logs);
                 this.showChart();
               });
             } else {
@@ -521,11 +531,11 @@
           },
           tabSwitch: function(tab) {
             this.$data.tab = tab;
-            this.$data.barchart?.clear();
+            this.$data.barchart.instance?.clear();
             this.showChart();
           },
           changeAxis: function() {
-            this.$data.barchart?.clear();
+            this.$data.barchart.instance?.clear();
             this.showChart();
           },
           changeDrilldown: function() {
@@ -536,25 +546,25 @@
           showChart: function() {
             if (this.$data.tab == 'barchart') {
               var promise = (this.$data.realtime
-                ? Promise.resolve({data: {docs: this.$data.logs}})
-                : this.$data.http.get(`/api/documents?query=${encodeURIComponent(this.getQuery())}&fields=${this.$data.yaxis},${this.$data.xaxis}`)
+                ? Promise.resolve({data: {docs: this.$data.table.logs}})
+                : this.$data.http.get(`/api/documents?query=${encodeURIComponent(this.getQuery())}&fields=${this.$data.barchart.yaxis},${this.$data.barchart.xaxis}`)
               );
               return promise.then(response => {
-                var barchart = this.$data.barchart || echarts.init(this.$refs.barchart);
+                var barchart = this.$data.barchart.instance || echarts.init(this.$refs.barchart);
                 var yaxis = {
-                  format: this.$data.axis[this.$data.yaxis].format,
-                  list: (this.$data.axis[this.$data.yaxis].collect)(response.data.docs)
+                  format: this.$data.axis[this.$data.barchart.yaxis].format,
+                  list: (this.$data.axis[this.$data.barchart.yaxis].collect)(response.data.docs)
                 };
                 var xaxis = {
-                  format: this.$data.axis[this.$data.xaxis].format,
-                  list: (this.$data.axis[this.$data.xaxis].collect)(response.data.docs)
+                  format: this.$data.axis[this.$data.barchart.xaxis].format,
+                  list: (this.$data.axis[this.$data.barchart.xaxis].collect)(response.data.docs)
                 };
-                if (!this.$data.barchart) {
-                  this.$data.barchart = barchart;
+                if (!this.$data.barchart.instance) {
+                  this.$data.barchart.instance = barchart;
                   // TODO: clickで絞り込み
                   barchart.on('dblclick', (event) => {
                     if (!this.$data.realtime) {
-                      this.$data.query = `(${this.$data.query?.trim() || '*:*'}) AND ${this.$data.axis[this.$data.yaxis].query(event.name)} AND ${this.$data.axis[this.$data.xaxis].query(event.seriesName)}`;
+                      this.$data.condition.query = `(${this.$data.condition.query?.trim() || '*:*'}) AND ${this.$data.axis[this.$data.barchart.yaxis].query(event.name)} AND ${this.$data.axis[this.$data.barchart.xaxis].query(event.seriesName)}`;
                       this.search();
                       this.$data.tab = 'table';
                     }
