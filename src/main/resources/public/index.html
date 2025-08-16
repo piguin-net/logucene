@@ -16,7 +16,7 @@
         flex-direction: column;
       }
       .p-tabs {
-        height: calc(100% - 42px);
+        height: calc(100% - 58px);
       }
       .p-tabpanels,.p-tabpanel-active {
         height: 100%;
@@ -71,6 +71,7 @@
         Toast,
         ToastService,
         ToggleSwitch,
+        Tooltip,
         useToast, 
       } = PrimeVue;
 
@@ -78,25 +79,42 @@
         template: `
           <Toast position="bottom-right" />
           <div style="display: flex; justify-content: space-between;">
-            <div style="display: flex; align-items: center; width: 180px; justify-content: space-evenly;">
-              <ToggleSwitch v-model="realtime" @change="switchRealTimeMode" />
-              <label>RealTimeMode</label>
+            <div style="display: flex; align-items: center; width: 80px; justify-content: space-evenly;">
+              <i class="pi pi-bolt" :style="{'font-size': '1.5rem', 'color': realtime ? '#10b981' : '#cbd5e1'}"></i>
+              <ToggleSwitch v-tooltip.bottom="'RealTime'" v-model="realtime" @change="switchRealTimeMode" />
             </div>
-            <div style="display: flex; width: calc(100% - 180px);">
-              <DatePicker ref="datePicker" v-model="date" :disabled="realtime" dateFormat="yy-mm-dd" placeholder="day" showIcon @update:modelValue="dateSelect" :inputStyle="{'width': '110px'}" />
-              <MultiSelect v-model="host" :disabled="realtime" :options="config.host" style="width: 200px;" filter placeholder="host" :maxSelectedLabels="1" @update:modelValue="search" />
-              <MultiSelect v-model="facility" :disabled="realtime" :options="config.facility" style="width: 200px;" filter placeholder="facility" :maxSelectedLabels="1" @update:modelValue="search" />
-              <MultiSelect v-model="severity" :disabled="realtime" :options="config.severity" style="width: 200px;" filter placeholder="severity" :maxSelectedLabels="1" @update:modelValue="search" />
-              <InputText type="text" v-model="query" :disabled="realtime" style="width: calc(100% - 931px);" placeholder="Query" @keydown="$event.key == 'Enter' && search()" />
-              <Button severity="success" icon="pi pi-search" :disabled="realtime" @click="search" label="Search" />
-              <Button severity="info" icon="pi pi-download" :disabled="realtime" @click="download" />
+            <div style="display: flex; width: calc(100% - 100px);">
+              <IftaLabel>
+                <DatePicker ref="datePicker" v-model="date" inputId="day" :disabled="realtime" dateFormat="yy-mm-dd" showIcon @update:modelValue="dateSelect" :inputStyle="{'width': '110px'}" />
+                <label for="day">Day</label>
+              </IftaLabel>
+              <IftaLabel>
+                <MultiSelect v-model="host" inputId="host" :disabled="realtime" :options="config.host" style="width: 150px;" filter :maxSelectedLabels="1" @update:modelValue="search" />
+                <label for="host">Host</label>
+              </IftaLabel>
+              <IftaLabel>
+                <MultiSelect v-model="facility" inputId="facility" :disabled="realtime" :options="config.facility" style="width: 150px;" filter :maxSelectedLabels="1" @update:modelValue="search" />
+                <label for="facility">Facility</label>
+              </IftaLabel>
+              <IftaLabel>
+                <MultiSelect v-model="severity" inputId="severity" :disabled="realtime" :options="config.severity" style="width: 150px;" filter :maxSelectedLabels="1" @update:modelValue="search" />
+                <label for="severity">Severity</label>
+              </IftaLabel>
+              <IftaLabel style="width: calc(100% - 760px);">
+                <InputText type="text" v-model="query" inputId="query" :disabled="realtime" style="width: 100%;" @keydown="$event.key == 'Enter' && search()" />
+                <label for="query">Query</label>
+              </IftaLabel>
+              <Button v-tooltip.bottom="'Search'" severity="success" icon="pi pi-search" :disabled="realtime" @click="search" />
+              <Button v-tooltip.bottom="'Download'" severity="info" icon="pi pi-download" :disabled="realtime" @click="download" />
+              <Button v-tooltip.bottom="'Clear Filter'" severity="warn" icon="pi pi-filter-slash" :disabled="realtime" @click="clearFilter" />
               <Button severity="help" icon="pi pi-cog" @click="showDialog = true" />
             </div>
           </div>
-          <Tabs :value="tab" @update:value="tabSwitch">
+          <Tabs :value="tab" @update:value="tabSwitch" style="padding: 10px 10px 0 10px;">
             <TabList>
               <Tab value="table">Table</Tab>
-              <Tab value="chart">Chart</Tab>
+              <Tab value="piechart">PieChart</Tab>
+              <Tab value="barchart">BarChart</Tab>
             </TabList>
             <TabPanels>
               <TabPanel value="table">
@@ -114,6 +132,7 @@
                   scrollHeight="100%"
                   :virtualScrollerOptions="{ itemSize: 49 }"
                   @page="pageChange"
+                  style="padding: 10px;"
                 >
                   <Column
                     v-for="field in fields[0]"
@@ -124,8 +143,39 @@
                   <template #empty> no data. </template>
                 </DataTable>
               </TabPanel>
-              <TabPanel value="chart">
-                <div ref="chart" style="height: 100%;"></div>
+              <TabPanel value="piechart">
+                <div style="height: 100%; display: flex;">
+                  <div style="display: flex; flex-direction: column; justify-content: center; width: 500px;">
+                    <h3>DrillDown</h3>
+                    <PickList v-model="drilldown" @update:modelValue="changeDrilldown">
+                      <template v-slot:sourceheader>
+                        <label style="font-weight: bold;">Enable</label>
+                      </template>
+                      <template v-slot:targetheader>
+                        <label style="font-weight: bold;">Disable</label>
+                      </template>
+                      <template #option="{ option }">
+                        <label style="width: 100px;">{{ option }}</label>
+                      </template>
+                    </PickList>
+                  </div>
+                  <div style="height: 100%; width: calc(100% - 500px); display: flex; flex-direction: column;">
+                    <div ref="piechart" style="height: 100%; width: 100%;"></div>
+                  </div>
+                </div>
+              </TabPanel>
+              <TabPanel value="barchart">
+                <div style="display: flex;">
+                  <IftaLabel style="width: 50%;">
+                    <Select style="width: 100%;" v-model="yaxis" inputId="yaxis" :options="Object.keys(axis)" @change="changeAxis" />
+                    <label for="yaxis">Y-Axis</label>
+                  </IftaLabel>
+                  <IftaLabel style="width: 50%;">
+                    <Select style="width: 100%;" v-model="xaxis" inputId="xaxis" :options="Object.keys(axis)" @change="changeAxis" />
+                    <label for="xaxis">X-Axis</label>
+                  </IftaLabel>
+                </div>
+                <div ref="barchart" style="height: calc(100% - 58px);"></div>
               </TabPanel>
             </TabPanels>
           </Tabs>
@@ -138,21 +188,10 @@
               <template v-slot:targetheader>
                 <label style="font-weight: bold;">Hidden</label>
               </template>
-              <template #option="{ option  }">
+              <template #option="{ option }">
                 <label style="width: 100px;">{{ option.name }}</label>
               </template>
             </PickList>
-            <h3>Chart</h3>
-            <div style="display: flex;">
-              <IftaLabel style="width: 50%;">
-                <Select style="width: 100%;" v-model="yaxis" inputId="yaxis" :options="Object.keys(axis)" @change="changeAxis" />
-                <label for="yaxis">Y-Axis</label>
-              </IftaLabel>
-              <IftaLabel style="width: 50%;">
-                <Select style="width: 100%;" v-model="xaxis" inputId="xaxis" :options="Object.keys(axis)" @change="changeAxis" />
-                <label for="xaxis">X-Axis</label>
-              </IftaLabel>
-            </div>
           </Dialog>
           <div v-if="blocked" style="position: fixed; top: 0px; left: 0px; width: 100%; height: 100%; z-index: 9999; background-color: rgba(0, 0, 0, 0.4);"></div>
         `,
@@ -160,7 +199,8 @@
           return {
             http: axios.create(),
             blocked: false,
-            date: new Date(),
+            date: null,
+            // TODO: multiple
             query: '*:*',
             fields: [[
               {name: 'day'},
@@ -186,12 +226,12 @@
             socket: null,
             realtime: false,
             tab: 'table',
-            chart: null,
+            barchart: null,
             yaxis: 'host',
             xaxis: 'severity',
             axis: {
               'day': {
-                query: value => `day:"${value}"`,
+                query: value => `day:["${value}" TO "${value}"]`,
                 format: log => log.day,
                 collect: data => [...new Set(data.map(row => row.day))].sort()
               },
@@ -231,6 +271,17 @@
                 collect: data => this.$data.config.severity
               },
             },
+            drilldown: [[
+              'day',
+              'severity',
+              'host',
+            ],[
+              'time',
+              'format',
+              'addr',
+              'port',
+              'facility',
+            ]],
             facility: [],
             severity: [],
             host: [],
@@ -238,6 +289,11 @@
               host: [],
               facility: [],
               severity: [],
+            },
+            piechart: {
+              instance: null,
+              filters: [],
+              axis: []
             }
           };
         },
@@ -295,6 +351,14 @@
           });
         },
         methods: {
+          clearFilter: function() {
+            this.$data.day = null;
+            this.$data.host = [];
+            this.$data.facility = [];
+            this.$data.severity = [];
+            this.$data.query = '*:*';
+            this.search();
+          },
           dateSelect: function(event) {
             this.search();
           },
@@ -317,6 +381,7 @@
             }
             return encodeURIComponent(query);
           },
+          // TODO: 削除
           search: function(event) {
             this.$data.logs = [];
             this.$data.total = 0;
@@ -328,12 +393,12 @@
             );
           },
           pageChange: function(event, showToast) {
-            this.$data.rows = event.rows;
-            this.$data.first = event.first;
+            this.$data.rows = event.rows || this.$data.rows;
+            this.$data.first = event.first || 0;
             return this.$data.http.get(
               `/api/documents?query=${this.getQuery()}`
-              + `&first=${event.first}`
-              + `&last=${event.first + event.rows}`
+              + `&first=${this.$data.first}`
+              + `&last=${this.$data.first + this.$data.rows}`
             ).then(response => {
               this.$data.logs  = response.data.docs;
               this.$data.total = response.data.total;
@@ -368,7 +433,9 @@
           switchRealTimeMode() {
             this.$data.logs = [];
             this.$data.total = 0;
-            this.$data.chart?.clear();
+            this.$data.piechart.filters = [];
+            this.$data.piechart?.instance?.clear();
+            this.$data.barchart?.clear();
             this.showChart();
             if (this.$data.realtime) {
               this.$data.socket = new WebSocket("/ws/realtime");
@@ -384,21 +451,28 @@
           },
           tabSwitch: function(tab) {
             this.$data.tab = tab;
-            this.$data.chart?.clear();
+            this.$data.piechart.filters = [];
+            this.$data.piechart?.instance?.clear();
+            this.$data.barchart?.clear();
             this.showChart();
           },
           changeAxis: function() {
-            this.$data.chart?.clear();
+            this.$data.barchart?.clear();
+            this.showChart();
+          },
+          changeDrilldown: function() {
+            this.$data.piechart.filters = [];
+            this.$data.piechart?.instance?.clear();
             this.showChart();
           },
           showChart: function() {
-            if (this.$data.tab == 'chart') {
+            if (this.$data.tab == 'barchart') {
               var promise = (this.$data.realtime
                 ? Promise.resolve({data: {docs: this.$data.logs}})
-                : this.$data.http.get(`/api/documents?query=${this.getQuery()}`)
+                : this.$data.http.get(`/api/documents?query=${this.getQuery()}&fields=${this.$data.yaxis},${this.$data.xaxis}`)
               );
               return promise.then(response => {
-                var chart = this.$data.chart || echarts.init(this.$refs.chart);
+                var barchart = this.$data.barchart || echarts.init(this.$refs.barchart);
                 var yaxis = {
                   format: this.$data.axis[this.$data.yaxis].format,
                   list: (this.$data.axis[this.$data.yaxis].collect)(response.data.docs)
@@ -407,12 +481,15 @@
                   format: this.$data.axis[this.$data.xaxis].format,
                   list: (this.$data.axis[this.$data.xaxis].collect)(response.data.docs)
                 };
-                if (!this.$data.chart) {
-                  this.$data.chart = chart;
-                  chart.on('dblclick', (event) => {
-                    this.$data.query = `(${this.$data.query?.trim() || '*:*'}) AND ${this.$data.axis[this.$data.yaxis].query(event.name)} AND ${this.$data.axis[this.$data.xaxis].query(event.seriesName)}`;
-                    this.search();
-                    this.$data.tab = 'table';
+                if (!this.$data.barchart) {
+                  this.$data.barchart = barchart;
+                  // TODO: clickで絞り込み
+                  barchart.on('dblclick', (event) => {
+                    if (!this.$data.realtime) {
+                      this.$data.query = `(${this.$data.query?.trim() || '*:*'}) AND ${this.$data.axis[this.$data.yaxis].query(event.name)} AND ${this.$data.axis[this.$data.xaxis].query(event.seriesName)}`;
+                      this.search();
+                      this.$data.tab = 'table';
+                    }
                   });
                 }
                 var count = {};
@@ -425,7 +502,7 @@
                 for (var log of response.data.docs) {
                   count[yaxis.format(log)][xaxis.format(log)]++;
                 }
-                option = {
+                var option = {
                   tooltip: {
                     trigger: 'axis',
                     axisPointer: {
@@ -455,13 +532,106 @@
                     };
                   })
                 };
-                chart.setOption(option);
+                barchart.setOption(option);
               }).catch(e => {
                 this.$data.toast.add({
                   severity: 'error',
                   summary: e,
                 });
-              })
+              });
+            } else if (this.$data.tab == 'piechart') {
+              return new Promise((resolve, reject) => {
+                this.$nextTick(() => {
+                  var piechart = this.$data.piechart.instance || echarts.init(this.$refs.piechart);
+                  if (!this.$data.piechart.instance) {
+                    this.$data.piechart.instance = piechart;
+                    var prev = 0;
+                    var id = null;
+                    piechart.on('click', (event) => {
+                      // TODO: 標準のダブルクリック
+                      var timeout = 250;
+                      if (new Date().getTime() - prev > timeout) {
+                        prev = new Date().getTime();
+                        id = setTimeout(() => {
+                          drilldown({key: event.seriesName, value: event.name});
+                        }, timeout);
+                      } else {
+                        prev = 0;
+                        clearTimeout(id);
+                        if (this.$data.drilldown[0].length == this.$data.piechart.filters.length) {
+                          this.$data.piechart.filters.pop();
+                        }
+                        if (this.$data.piechart.filters.length > 0) {
+                          this.$data.piechart.filters.pop();
+                          drilldown();
+                        }
+                      }
+                    });
+                  }
+                  var drilldown = (filter) => {
+                    // TODO: 微妙
+                    if (filter && this.$data.drilldown[0].length > this.$data.piechart.filters.length) {
+                      this.$data.piechart.filters.push(filter);
+                    }
+                    if (this.$data.drilldown[0].length == this.$data.piechart.filters.length) {
+                      if (!this.$data.realtime) {
+                        var filter = this.$data.piechart.filters.map(filter => this.$data.axis[filter.key].query(filter.value)).join(' AND ');
+                        this.$data.query = `(${this.$data.query?.trim() || '*:*'})${filter ? ' AND ' + filter : ''}`;
+                        this.$data.tab = 'table';
+                        return this.search();
+                      } else {
+                        return Promise.resolve();
+                      }
+                    } else {
+                      var promise = (this.$data.realtime
+                        ? Promise.resolve({data: {docs: this.$data.logs}})
+                        : this.$data.http.get(`/api/documents?query=${this.getQuery()}&fields=${this.$data.drilldown[0].join(',')}`)
+                      );
+                      return promise.then(response => {
+                        var target = this.$data.drilldown[0][this.$data.piechart.filters.length];
+                        var data = response.data.docs;
+                        for (var filter of this.$data.piechart.filters) {
+                          data = data.filter(row => row[filter.key] == filter.value);
+                        }
+                        var count = {};
+                        for (var row of data) {
+                          var key = this.$data.axis[target].format(row);
+                          if (!(key in count)) count[key] = 0;
+                          count[key]++;
+                        }
+                        var option = {
+                          title: {
+                            text: target,
+                            subtext: this.$data.piechart.filters.map(filter => `${filter.key}:${filter.value}`).join(' / ')
+                          },
+                          tooltip: {
+                            trigger: 'item'
+                          },
+                          series: [
+                            {
+                              name: target,
+                              type: 'pie',
+                              data: Object.keys(count).sort().map(key => {
+                                return {
+                                  name: key,
+                                  value: count[key]
+                                };
+                              })
+                            }
+                          ]
+                        };
+                        piechart.setOption(option);
+                      }).catch(e => {
+                        this.$data.toast.add({
+                          severity: 'error',
+                          summary: e,
+                        });
+                      });
+                    }
+                  };
+                  resolve(drilldown());
+                });
+              });
             } else {
               return Promise.resolve();
             }
@@ -487,6 +657,8 @@
         }
       }).use(
         ToastService
+      ).directive(
+        'tooltip', Tooltip
       );
 
       const components = [
