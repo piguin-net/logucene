@@ -207,8 +207,8 @@ public class SyslogReceiver implements Runnable {
             Document doc = init.get();
             Integer priority = SyslogParser.parsePriority(message).getKey();
             if (priority != null) {
-                doc.add(LuceneFieldKeys.facility.field(Facility.of(priority / 8).name()));
-                doc.add(LuceneFieldKeys.severity.field(Severity.of(priority % 8).name()));
+                doc.add(LuceneFieldKeys.facility.field(Facility.of(priority).name()));
+                doc.add(LuceneFieldKeys.severity.field(Severity.of(priority).name()));
             }
             doc.add(LuceneFieldKeys.host.field(addr));
             doc.add(LuceneFieldKeys.day.field(now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))));

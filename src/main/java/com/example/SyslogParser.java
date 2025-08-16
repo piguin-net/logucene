@@ -48,9 +48,10 @@ public class SyslogParser {
             return this.id;
         }
 
-        public static Facility of(Integer id) {
+        public static Facility of(Integer priority) {
+            Integer facility = priority / 8;
             for (Facility item: Facility.values()) {
-                if (item.id == id) {
+                if (item.id == facility) {
                     return item;
                 }
             }
@@ -79,9 +80,10 @@ public class SyslogParser {
             return this.id;
         }
 
-        public static Severity of(Integer id) {
+        public static Severity of(Integer priority) {
+            Integer severity = priority % 8;
             for (Severity item: Severity.values()) {
-                if (item.id == id) {
+                if (item.id == severity) {
                     return item;
                 }
             }
@@ -100,8 +102,8 @@ public class SyslogParser {
         public String message;
         public Rfc3164(Integer priority) {
             this.priority   = priority;
-            this.facility   = Facility.of(this.priority / 8);
-            this.severity   = Severity.of(this.priority % 8);
+            this.facility   = Facility.of(this.priority);
+            this.severity   = Severity.of(this.priority);
             this.format = "rfc3164";
         }
     }
