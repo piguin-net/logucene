@@ -140,6 +140,11 @@ public class Main
                 staticFiles.directory = "/public";
                 staticFiles.location = Location.CLASSPATH;
             });
+            config.staticFiles.add(staticFiles -> {
+                staticFiles.hostedPath = "/webjars";
+                staticFiles.directory = "/META-INF/resources/webjars";
+                staticFiles.location = Location.CLASSPATH;
+            });
         }).get(
             "/api/search", ctx -> ctx.json(search(ctx.queryParam("query")))
         ).get(
