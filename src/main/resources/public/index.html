@@ -62,6 +62,8 @@
         MultiSelect,
         PickList,
         Select,
+        Splitter,
+        SplitterPanel,
         Tab,
         Tabs,
         TabList,
@@ -72,6 +74,7 @@
         ToastService,
         ToggleSwitch,
         Tooltip,
+        Tree,
         useToast, 
       } = PrimeVue;
 
@@ -118,30 +121,50 @@
             </TabList>
             <TabPanels>
               <TabPanel value="table">
-                <DataTable
-                  ref="table"
-                  showGridlines
-                  scrollable
-                  paginator
-                  :lazy="true"
-                  :totalRecords="total"
-                  :first="first"
-                  :rows="rows"
-                  :rowsPerPageOptions="[100, 300, 500, 1000]"
-                  :value="logs"
-                  scrollHeight="100%"
-                  :virtualScrollerOptions="{ itemSize: 49 }"
-                  @page="pageChange"
-                  style="padding: 10px;"
-                >
-                  <Column
-                    v-for="field in fields[0]"
-                    :field="field.name"
-                    :header="field.name"
-                    :headerStyle="{'background-color': 'lightgray'}"
-                  ></Column>
-                  <template #empty> no data. </template>
-                </DataTable>
+                <Splitter style="height: 100%;">
+                  <SplitterPanel :size="15" :minSize="10">
+                    <Tree
+                      :value="tree.value"
+                      v-model:selectionKeys="tree.selectedKeys"
+                      selectionMode="single"
+                      style="height: 100%;"
+                      @nodeSelect="treeSelect"
+                      @nodeUnselect="treeUnselect"
+                      @nodeExpand="treeExpand"
+                    >
+                      <template #default="slotProps">
+                        <label>{{ slotProps.node.label }}({{ slotProps.node.data.count.toLocaleString() }})</label>
+                        <div><progress :max="slotProps.node.data.subtotal" :value="slotProps.node.data.count"></progress></div>
+                      </template>
+                    </Tree>
+                  </SplitterPanel>
+                  <SplitterPanel :size="85">
+                    <DataTable
+                      ref="table"
+                      showGridlines
+                      scrollable
+                      paginator
+                      :lazy="true"
+                      :totalRecords="total"
+                      :first="first"
+                      :rows="rows"
+                      :rowsPerPageOptions="[100, 300, 500, 1000]"
+                      :value="logs"
+                      scrollHeight="100%"
+                      :virtualScrollerOptions="{ itemSize: 49 }"
+                      @page="pageChange"
+                      style="padding: 10px;"
+                    >
+                      <Column
+                        v-for="field in fields[0]"
+                        :field="field.name"
+                        :header="field.name"
+                        :headerStyle="{'background-color': 'lightgray'}"
+                      ></Column>
+                      <template #empty> no data. </template>
+                    </DataTable>
+                  </SplitterPanel>
+                </Splitter>
               </TabPanel>
               <TabPanel value="piechart">
                 <div style="height: 100%; display: flex;">
@@ -272,10 +295,10 @@
               },
             },
             drilldown: [[
-              'day',
               'severity',
               'host',
             ],[
+              'day',
               'time',
               'format',
               'addr',
@@ -294,6 +317,11 @@
               instance: null,
               filters: [],
               axis: []
+            },
+            tree: {
+              value: [],
+              selectedKeys: [],
+              selected: null,
             }
           };
         },
@@ -351,6 +379,46 @@
           });
         },
         methods: {
+          treeSelect: function(node) {
+            this.$data.tree.selected = node;
+            this.pageChange();
+          },
+          treeUnselect: function(node) {
+            this.$data.tree.selected = null;
+            this.pageChange();
+          },
+          treeExpand: function(node) {
+            var axis = [...node.data.axis];
+            var field = axis.shift();
+            var query = encodeURIComponent(this.getQuery(node));
+            this.$data.http.get(
+              `/api/documents?query=${query}&fields=${field}`
+            ).then(response => {
+              var total = 0;
+              var count = {};
+              for (var row of response.data.docs) {
+                var key = this.$data.axis[field].format(row);
+                if (!(key in count)) count[key] = 0;
+                count[key]++;
+                total++;
+              }
+              node.children = Object.keys(count).map(key => {
+                return {
+                  key: crypto.randomUUID(),
+                  label: key,
+                  data: {
+                    'key': field,
+                    'value': key,
+                    'subtotal': total,
+                    'count': count[key],
+                    'axis': axis
+                  },
+                  leaf: axis.length == 0,
+                  parent: node
+                };
+              });
+            });
+          },
           clearFilter: function() {
             this.$data.day = null;
             this.$data.host = [];
@@ -362,8 +430,8 @@
           dateSelect: function(event) {
             this.search();
           },
-          getQuery: function() {
-            var query = `(${this.$data.query?.trim() || '*:*'})`;
+          getQuery: function(node, query) {
+            query = `(${query || this.$data.query?.trim() || '*:*'})`;
             if (this.$data.date != null) {
               var y = this.$data.date.getFullYear();
               var m = ('0' + (this.$data.date.getMonth() + 1)).slice(-2);
@@ -379,7 +447,13 @@
             if (this.$data.facility.length > 0) {
               query = `${query} AND facility:${this.$data.facility.join('|')}`;
             }
-            return encodeURIComponent(query);
+            if (node) {
+              query = `${query} AND ${node.data.key}:${node.data.value}`;
+              if (node.parent) {
+                query = this.getQuery(node.parent, query);
+              }
+            }
+            return query;
           },
           // TODO: 削除
           search: function(event) {
@@ -390,13 +464,26 @@
               () => this.pageChange({first: 0, rows: this.$data.rows}, true)
             ).then(
               () => this.showChart()
-            );
+            ).then(() => {
+              this.$data.tree.value = [{
+                key: crypto.randomUUID(),
+                label: 'ALL',
+                data: {
+                  'key': '*',
+                  'value': '*',
+                  'subtotal': this.$data.total,
+                  'count': this.$data.total,
+                  'axis': [...this.$data.drilldown[0]]
+                },
+                leaf: false
+              }];
+            });
           },
           pageChange: function(event, showToast) {
-            this.$data.rows = event.rows || this.$data.rows;
-            this.$data.first = event.first || 0;
+            this.$data.rows = event?.rows || this.$data.rows;
+            this.$data.first = event?.first || 0;
             return this.$data.http.get(
-              `/api/documents?query=${this.getQuery()}`
+              `/api/documents?query=${encodeURIComponent(this.getQuery(this.$data.tree.selected))}`
               + `&first=${this.$data.first}`
               + `&last=${this.$data.first + this.$data.rows}`
             ).then(response => {
@@ -427,7 +514,7 @@
           download: function() {
             var a = document.createElement('a');
             a.target = '_blank';
-            a.href = `/api/download/sqlite?query=${this.getQuery()}`;
+            a.href = `/api/download/sqlite?query=${encodeURIComponent(this.getQuery())}`;
             a.click();
           },
           switchRealTimeMode() {
@@ -469,7 +556,7 @@
             if (this.$data.tab == 'barchart') {
               var promise = (this.$data.realtime
                 ? Promise.resolve({data: {docs: this.$data.logs}})
-                : this.$data.http.get(`/api/documents?query=${this.getQuery()}&fields=${this.$data.yaxis},${this.$data.xaxis}`)
+                : this.$data.http.get(`/api/documents?query=${encodeURIComponent(this.getQuery())}&fields=${this.$data.yaxis},${this.$data.xaxis}`)
               );
               return promise.then(response => {
                 var barchart = this.$data.barchart || echarts.init(this.$refs.barchart);
@@ -585,7 +672,7 @@
                     } else {
                       var promise = (this.$data.realtime
                         ? Promise.resolve({data: {docs: this.$data.logs}})
-                        : this.$data.http.get(`/api/documents?query=${this.getQuery()}&fields=${this.$data.drilldown[0].join(',')}`)
+                        : this.$data.http.get(`/api/documents?query=${encodeURIComponent(this.getQuery())}&fields=${this.$data.drilldown[0].join(',')}`)
                       );
                       return promise.then(response => {
                         var target = this.$data.drilldown[0][this.$data.piechart.filters.length];
@@ -673,6 +760,8 @@
         MultiSelect,
         PickList,
         Select,
+        Splitter,
+        SplitterPanel,
         Tab,
         Tabs,
         TabList,
@@ -680,6 +769,7 @@
         TabPanels,
         Toast,
         ToggleSwitch,
+        Tree,
       ];
       for (var component of components) {
         app.component(component.name, component);
