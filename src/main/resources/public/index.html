@@ -116,7 +116,6 @@
           <Tabs :value="tab" @update:value="tabSwitch" style="padding: 10px 10px 0 10px;">
             <TabList>
               <Tab value="table">Table</Tab>
-              <Tab value="piechart">PieChart</Tab>
               <Tab value="barchart">BarChart</Tab>
             </TabList>
             <TabPanels>
@@ -166,27 +165,6 @@
                   </SplitterPanel>
                 </Splitter>
               </TabPanel>
-              <TabPanel value="piechart">
-                <div style="height: 100%; display: flex;">
-                  <div style="display: flex; flex-direction: column; justify-content: center; width: 500px;">
-                    <h3>DrillDown</h3>
-                    <PickList v-model="drilldown" @update:modelValue="changeDrilldown">
-                      <template v-slot:sourceheader>
-                        <label style="font-weight: bold;">Enable</label>
-                      </template>
-                      <template v-slot:targetheader>
-                        <label style="font-weight: bold;">Disable</label>
-                      </template>
-                      <template #option="{ option }">
-                        <label style="width: 100px;">{{ option }}</label>
-                      </template>
-                    </PickList>
-                  </div>
-                  <div style="height: 100%; width: calc(100% - 500px); display: flex; flex-direction: column;">
-                    <div ref="piechart" style="height: 100%; width: 100%;"></div>
-                  </div>
-                </div>
-              </TabPanel>
               <TabPanel value="barchart">
                 <div style="display: flex;">
                   <IftaLabel style="width: 50%;">
@@ -213,6 +191,18 @@
               </template>
               <template #option="{ option }">
                 <label style="width: 100px;">{{ option.name }}</label>
+              </template>
+            </PickList>
+            <h3>DrillDown</h3>
+            <PickList v-model="drilldown" @update:modelValue="changeDrilldown">
+              <template v-slot:sourceheader>
+                <label style="font-weight: bold;">Enable</label>
+              </template>
+              <template v-slot:targetheader>
+                <label style="font-weight: bold;">Disable</label>
+              </template>
+              <template #option="{ option }">
+                <label style="width: 100px;">{{ option }}</label>
               </template>
             </PickList>
           </Dialog>
@@ -312,11 +302,6 @@
               host: [],
               facility: [],
               severity: [],
-            },
-            piechart: {
-              instance: null,
-              filters: [],
-              axis: []
             },
             tree: {
               value: [],
@@ -520,8 +505,6 @@
           switchRealTimeMode() {
             this.$data.logs = [];
             this.$data.total = 0;
-            this.$data.piechart.filters = [];
-            this.$data.piechart?.instance?.clear();
             this.$data.barchart?.clear();
             this.showChart();
             if (this.$data.realtime) {
@@ -538,8 +521,6 @@
           },
           tabSwitch: function(tab) {
             this.$data.tab = tab;
-            this.$data.piechart.filters = [];
-            this.$data.piechart?.instance?.clear();
             this.$data.barchart?.clear();
             this.showChart();
           },
@@ -548,9 +529,9 @@
             this.showChart();
           },
           changeDrilldown: function() {
-            this.$data.piechart.filters = [];
-            this.$data.piechart?.instance?.clear();
-            this.showChart();
+            this.$data.tree.selected = null;
+            this.$data.tree.selectedKeys = [];
+            this.search();
           },
           showChart: function() {
             if (this.$data.tab == 'barchart') {
@@ -624,99 +605,6 @@
                 this.$data.toast.add({
                   severity: 'error',
                   summary: e,
-                });
-              });
-            } else if (this.$data.tab == 'piechart') {
-              return new Promise((resolve, reject) => {
-                this.$nextTick(() => {
-                  var piechart = this.$data.piechart.instance || echarts.init(this.$refs.piechart);
-                  if (!this.$data.piechart.instance) {
-                    this.$data.piechart.instance = piechart;
-                    var prev = 0;
-                    var id = null;
-                    piechart.on('click', (event) => {
-                      // TODO: 標準のダブルクリック
-                      var timeout = 250;
-                      if (new Date().getTime() - prev > timeout) {
-                        prev = new Date().getTime();
-                        id = setTimeout(() => {
-                          drilldown({key: event.seriesName, value: event.name});
-                        }, timeout);
-                      } else {
-                        prev = 0;
-                        clearTimeout(id);
-                        if (this.$data.drilldown[0].length == this.$data.piechart.filters.length) {
-                          this.$data.piechart.filters.pop();
-                        }
-                        if (this.$data.piechart.filters.length > 0) {
-                          this.$data.piechart.filters.pop();
-                          drilldown();
-                        }
-                      }
-                    });
-                  }
-                  var drilldown = (filter) => {
-                    // TODO: 微妙
-                    if (filter && this.$data.drilldown[0].length > this.$data.piechart.filters.length) {
-                      this.$data.piechart.filters.push(filter);
-                    }
-                    if (this.$data.drilldown[0].length == this.$data.piechart.filters.length) {
-                      if (!this.$data.realtime) {
-                        var filter = this.$data.piechart.filters.map(filter => this.$data.axis[filter.key].query(filter.value)).join(' AND ');
-                        this.$data.query = `(${this.$data.query?.trim() || '*:*'})${filter ? ' AND ' + filter : ''}`;
-                        this.$data.tab = 'table';
-                        return this.search();
-                      } else {
-                        return Promise.resolve();
-                      }
-                    } else {
-                      var promise = (this.$data.realtime
-                        ? Promise.resolve({data: {docs: this.$data.logs}})
-                        : this.$data.http.get(`/api/documents?query=${encodeURIComponent(this.getQuery())}&fields=${this.$data.drilldown[0].join(',')}`)
-                      );
-                      return promise.then(response => {
-                        var target = this.$data.drilldown[0][this.$data.piechart.filters.length];
-                        var data = response.data.docs;
-                        for (var filter of this.$data.piechart.filters) {
-                          data = data.filter(row => row[filter.key] == filter.value);
-                        }
-                        var count = {};
-                        for (var row of data) {
-                          var key = this.$data.axis[target].format(row);
-                          if (!(key in count)) count[key] = 0;
-                          count[key]++;
-                        }
-                        var option = {
-                          title: {
-                            text: target,
-                            subtext: this.$data.piechart.filters.map(filter => `${filter.key}:${filter.value}`).join(' / ')
-                          },
-                          tooltip: {
-                            trigger: 'item'
-                          },
-                          series: [
-                            {
-                              name: target,
-                              type: 'pie',
-                              data: Object.keys(count).sort().map(key => {
-                                return {
-                                  name: key,
-                                  value: count[key]
-                                };
-                              })
-                            }
-                          ]
-                        };
-                        piechart.setOption(option);
-                      }).catch(e => {
-                        this.$data.toast.add({
-                          severity: 'error',
-                          summary: e,
-                        });
-                      });
-                    }
-                  };
-                  resolve(drilldown());
                 });
               });
             } else {
