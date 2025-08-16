@@ -150,9 +150,12 @@
                       :rowsPerPageOptions="[100, 300, 500, 1000]"
                       :value="table.logs"
                       scrollHeight="100%"
-                      :virtualScrollerOptions="{ itemSize: 49 }"
+                      :virtualScrollerOptions="{ itemSize: 37 }"
+                      selectionMode="single"
+                      v-model:selection="table.selected"
                       @page="pageChange"
                       style="padding: 10px;"
+                      size="small"
                     >
                       <Column
                         v-for="field in table.fields[0]"
@@ -183,6 +186,20 @@
           <Dialog v-model:visible="showDialog" modal header="Config">
             <div style="display: flex; width: 1000px; justify-content: space-around;">
               <div>
+                <h3>Tree</h3>
+                <PickList v-model="tree.drilldown" @update:modelValue="changeDrilldown">
+                  <template v-slot:sourceheader>
+                    <label style="font-weight: bold;">Enable</label>
+                  </template>
+                  <template v-slot:targetheader>
+                    <label style="font-weight: bold;">Disable</label>
+                  </template>
+                  <template #option="{ option }">
+                    <label style="width: 100px;">{{ option }}</label>
+                  </template>
+                </PickList>
+              </div>
+              <div>
                 <h3>Table</h3>
                 <PickList v-model="table.fields" dataKey="name">
                   <template v-slot:sourceheader>
@@ -193,20 +210,6 @@
                   </template>
                   <template #option="{ option }">
                     <label style="width: 100px;">{{ option.name }}</label>
-                  </template>
-                </PickList>
-              </div>
-              <div>
-                <h3>DrillDown</h3>
-                <PickList v-model="tree.drilldown" @update:modelValue="changeDrilldown">
-                  <template v-slot:sourceheader>
-                    <label style="font-weight: bold;">Enable</label>
-                  </template>
-                  <template v-slot:targetheader>
-                    <label style="font-weight: bold;">Disable</label>
-                  </template>
-                  <template #option="{ option }">
-                    <label style="width: 100px;">{{ option }}</label>
                   </template>
                 </PickList>
               </div>
@@ -256,6 +259,7 @@
               total: 0,
               first: 0,
               rows: 100,
+              selected: null
             },
             axis: {
               'day': {
@@ -431,6 +435,7 @@
           },
           getQuery: function(node, query) {
             query = `(${query || this.$data.condition.query?.trim() || '*:*'})`;
+            node = node || this.$data.tree.selected;
             if (this.$data.condition.date != null) {
               var y = this.$data.condition.date.getFullYear();
               var m = ('0' + (this.$data.condition.date.getMonth() + 1)).slice(-2);
@@ -458,11 +463,12 @@
             }
             return query;
           },
-          // TODO: 削除
           search: function(event) {
             this.$data.table.logs = [];
             this.$data.table.total = 0;
             this.$data.table.first = 0;
+            this.$data.tree.selected = null;
+            this.$data.tree.selectedKeys = [];
             return Promise.resolve().then(
               () => this.pageChange({first: 0, rows: this.$data.table.rows}, true)
             ).then(
@@ -486,7 +492,7 @@
             this.$data.table.rows = event?.rows || this.$data.table.rows;
             this.$data.table.first = event?.first || 0;
             return this.$data.http.get(
-              `/api/documents?query=${encodeURIComponent(this.getQuery(this.$data.tree.selected))}`
+              `/api/documents?query=${encodeURIComponent(this.getQuery())}`
               + `&first=${this.$data.table.first}`
               + `&last=${this.$data.table.first + this.$data.table.rows}`
             ).then(response => {
@@ -583,10 +589,11 @@
                 };
                 if (!this.$data.barchart.instance) {
                   this.$data.barchart.instance = barchart;
-                  // TODO: clickで絞り込み
                   barchart.on('dblclick', (event) => {
                     if (!this.$data.realtime) {
-                      this.$data.condition.query = `(${this.$data.condition.query?.trim() || '*:*'}) AND ${this.$data.axis[this.$data.barchart.yaxis].query(event.name)} AND ${this.$data.axis[this.$data.barchart.xaxis].query(event.seriesName)}`;
+                      this.$data.condition.query = `(${this.$data.condition.query?.trim() || '*:*'}) `
+                        + `AND ${this.$data.axis[this.$data.barchart.yaxis].query(event.name)} `
+                        + `AND ${this.$data.axis[this.$data.barchart.xaxis].query(event.seriesName)}`;
                       this.search();
                       this.$data.tab = 'table';
                     }
