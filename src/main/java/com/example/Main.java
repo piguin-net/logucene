@@ -22,7 +22,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 import java.util.zip.GZIPOutputStream;
 
 import javax.script.ScriptEngine;
@@ -350,33 +349,21 @@ public class Main
         String clazz = System.getProperty("sqlite.analyzer", "org.apache.lucene.analysis.standard.StandardAnalyzer");
         Analyzer analyzer = (Analyzer) Class.forName(clazz).getDeclaredConstructor().newInstance();
 
-        List<String> fields = Stream.concat(
-            Arrays.asList("id").stream(),
-            Arrays.asList(LuceneFieldKeys.values()).stream().map(field -> field.name())
+        List<String> fields = Arrays.asList(
+            LuceneFieldKeys.values()
+        ).stream().map(
+            field -> field.name()
         ).toList();
 
-        String table = "create table syslog ("
+        String ddl = "create virtual table syslog using fts5("
                      + String.join(", ", fields)
-                     + ");";
+                     + ", tokens);";
 
-        String virtual = "create virtual table syslog_fts using fts5(message);";
-
-        String insert = "insert into syslog ("
+        String dml = "insert into syslog (rowid, "
                       + String.join(", ", fields)
-                      + ") values ("
+                      + ", tokens) values (?, "
                       + fields.stream().map(field -> "?").collect(Collectors.joining(", "))
-                      + ");";
-
-        String fts = "insert into syslog_fts (rowid, message) values (?, ?);";
-
-        List<String> indexes = fields.stream().filter(
-            field -> !Arrays.asList(
-                LuceneFieldKeys.message.name(),
-                LuceneFieldKeys.raw.name()
-            ).contains(field)
-        ).map(
-            field -> "create index idx_syslog_" + field + " on syslog(" + field + ");"
-        ).toList();
+                      + ", ?);";
 
         Class.forName("org.sqlite.JDBC");
 
@@ -386,24 +373,13 @@ public class Main
             Statement statement = connection.createStatement();
         ) {
             connection.setAutoCommit(false);
-            statement.execute(table);
-            statement.execute(virtual);
-            for (String index: indexes) {
-                statement.execute(index);
-            }
+            statement.execute(ddl);
             try (LuceneReader reader = lucene.getReader();) {
                 for (int id: hits.ids) {
                     Document doc = reader.get(id);
-                    try (PreparedStatement sql = connection.prepareStatement(insert);) {
-                        sql.setInt(1, id);
-                        for (int i = 1; i < fields.size(); i++) {
-                            sql.setString(i + 1, doc.get(fields.get(i)));
-                        }
-                        sql.execute();
-                    }
                     String message = doc.get(LuceneFieldKeys.message.name());
                     try (
-                        PreparedStatement sql = connection.prepareStatement(fts);
+                        PreparedStatement insert = connection.prepareStatement(dml);
                         TokenStream tokenizer = analyzer.tokenStream(
                             LuceneFieldKeys.message.name(),
                             message
@@ -418,9 +394,14 @@ public class Main
                                 tokens = ("".equals(tokens) ? "" : tokens + " ") + token;
                             }
                         }
-                        sql.setInt(1, id);
-                        sql.setString(2, tokens);
-                        sql.execute();
+                        int i = 1;
+                        int j = 0;
+                        insert.setInt(i++, id);
+                        while (j < fields.size()) {
+                            insert.setString(i++, doc.get(fields.get(j++)));
+                        }
+                        insert.setString(i++, tokens);
+                        insert.execute();
                     }
                 }
             }
