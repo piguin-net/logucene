@@ -7,5 +7,5 @@
             ]
         }
     },
-    "forwardPorts": [1514, 8080]
+    "forwardPorts": [514, 8080]
 }

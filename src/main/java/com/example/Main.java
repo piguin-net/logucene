@@ -86,7 +86,7 @@ public class Main
     static {
         try {
             lucene = new LuceneManager(System.getProperty("lucene.index", "index"));
-            watcher = new SyslogReceiver(Integer.getInteger("syslog.port", 1514), lucene);
+            watcher = new SyslogReceiver(Integer.getInteger("syslog.port", 514), lucene);
             watcher.addEventListener(doc -> {
                 try {
                     List<Integer> deleteTargets = new ArrayList<>();

@@ -18,7 +18,7 @@ sudo docker run --rm \
   --user `id -u`:`id -g` \
   --workdir /opt/logucene \
   -v $PWD/target:/opt/logucene \
-  -p 1514:1514/udp \
+  -p 514:514/udp \
   -p 8080:8080 \
   openjdk:21 \
   java -Duser.timezone=Asia/Tokyo -jar logucene-1.0-SNAPSHOT-jar-with-dependencies.jar
@@ -27,7 +27,7 @@ sudo docker run --rm \
 # オプション
 ```
 java \
-  -Dsyslog.port=1514 \
+  -Dsyslog.port=514 \
   -Dweb.port=8080 \
   -Dlucene.index=index \
   -Dlucene.analyzer=org.apache.lucene.analysis.standard.StandardAnalyzer \
