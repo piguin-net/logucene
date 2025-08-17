@@ -22,26 +22,32 @@ import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.store.FSDirectory;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class LuceneManager implements Closeable {
-
-    private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
     private FSDirectory dir;
     private IndexWriter writer;
     private Analyzer analyzer;
 
+    // TODO: 全てのデータを1つのindexディレクトリに保存するなら古いデータの削除機能が欲しい、月毎などで分けたほうがいい？
     public static class LuceneReader implements Closeable {
 
         private final DirectoryReader reader;
         private final IndexSearcher searcher;
+        private final Analyzer analyzer;
 
-        public LuceneReader(String path) throws IOException {
+        public LuceneReader(String path, Analyzer analyzer) throws IOException {
             FSDirectory dir = FSDirectory.open(Paths.get(path));
             this.reader = DirectoryReader.open(dir);
             this.searcher = new IndexSearcher(reader);
+            this.analyzer = analyzer;
+        }
+
+        public TopDocs search(String field, String query, Sort order, Map<String, PointsConfig> pointsConfig) throws ParseException, IOException, QueryNodeException {
+            IndexSearcher searcher = new IndexSearcher(reader);
+            StandardQueryParser parser = new StandardQueryParser(this.analyzer);
+            parser.setPointsConfigMap(pointsConfig);
+            return searcher.search(parser.parse(query, field), Integer.MAX_VALUE, order);
         }
 
         public Document get(Integer id) throws IOException {
@@ -73,18 +79,8 @@ public class LuceneManager implements Closeable {
         this.writer.commit();
     }
 
-    public TopDocs search(String field, String query, Sort order, Map<String, PointsConfig> pointsConfig) throws ParseException, IOException, QueryNodeException {
-        logger.debug(query);
-        try (DirectoryReader reader = DirectoryReader.open(dir);) {
-            IndexSearcher searcher = new IndexSearcher(reader);
-            StandardQueryParser parser = new StandardQueryParser(this.analyzer);
-            parser.setPointsConfigMap(pointsConfig);
-            return searcher.search(parser.parse(query, field), Integer.MAX_VALUE, order);
-        }
-    }
-
     public LuceneReader getReader() throws IOException {
-        return new LuceneReader(dir.getDirectory().toAbsolutePath().toString());
+        return new LuceneReader(dir.getDirectory().toAbsolutePath().toString(), this.analyzer);
     }
 
     public Path getDirectory() {
@@ -95,4 +91,6 @@ public class LuceneManager implements Closeable {
     public void close() throws IOException {
         this.writer.close();
     }
+
+    // TODO: 頻出単語を取得
 }

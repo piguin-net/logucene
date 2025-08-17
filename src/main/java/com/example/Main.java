@@ -157,7 +157,12 @@ public class Main
         ).get(
             "/api/download/excel", Main::excel
         ).before(
-            ctx -> logger.atInfo().log(ctx.fullUrl())
+            ctx -> ctx.attribute("start", ZonedDateTime.now().toInstant().toEpochMilli())
+        ).after(
+            ctx -> logger.atInfo().log("{} {}",
+                ZonedDateTime.now().toInstant().toEpochMilli() - ((long)ctx.attribute("start")),
+                ctx.fullUrl()
+            )
         ).exception(Exception.class, (e, ctx) -> {
             logger.error(ctx.fullUrl(), e);
             ctx.status(HttpStatus.INTERNAL_SERVER_ERROR).json(e);
@@ -190,8 +195,8 @@ public class Main
         long start = ZonedDateTime.now().toInstant().toEpochMilli();
         SearchResult result = new SearchResult();
         result.query = query;
-        try {
-            TopDocs hits = lucene.search(
+        try (LuceneReader reader = lucene.getReader();) {
+            TopDocs hits = reader.search(
                 LuceneFieldKeys.message.name(),
                 result.query,
                 new Sort(new SortedNumericSortField(
@@ -292,6 +297,7 @@ public class Main
     }
 
     private static void count(Context ctx) throws ParseException, IOException, QueryNodeException {
+        // TODO: group by 的なことができないか https://stackoverflow.com/questions/20044786/how-to-get-the-unique-results-from-lucene-index
         try (LuceneReader reader = lucene.getReader();) {
             SearchResult hits = search(ctx.queryParam("query"));
             String field = ctx.queryParam("field");

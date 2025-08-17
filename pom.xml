@@ -116,6 +116,7 @@
         </exclusion>
       </exclusions>
     </dependency>
+    <!-- TODO: 軽いチャートへ変更 -->
     <!-- https://mvnrepository.com/artifact/org.webjars.npm/echarts -->
     <dependency>
       <groupId>org.webjars.npm</groupId>

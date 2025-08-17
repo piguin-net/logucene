@@ -38,6 +38,7 @@ public class SyslogReceiver implements Runnable {
 
     private Logger logger = LoggerFactory.getLogger(this.getClass());
 
+    // TODO: LuceneFieldKeys.values()ではなく、登録されているフィールドで回す
     public static enum LuceneFieldKeys {
         timestamp(LongField.class, long.class, new PointsConfig(new DecimalFormat(), Long.class)),
         day(KeywordField.class, String.class),
@@ -140,10 +141,10 @@ public class SyslogReceiver implements Runnable {
                             packet.getPort(),
                             message
                         );
-                        lucene.add(doc);
                         for (Consumer<Document> listener: this.onReceive) {
                             listener.accept(doc);
                         }
+                        lucene.add(doc);
                         log.apply(logger.atDebug()).log();
                     } catch (IOException e) {
                         log.apply(logger.atError()).log();
