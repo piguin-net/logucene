@@ -152,6 +152,8 @@ public class Main
         ).get(
             "/api/documents", Main::documents
         ).get(
+            "/api/count", Main::count
+        ).get(
             "/api/download/sqlite", Main::sqlite
         ).get(
             "/api/download/excel", Main::excel
@@ -285,6 +287,23 @@ public class Main
             ).result(
                 pin
             );
+        } catch (IndexNotFoundException e) {
+            logger.atWarn().log("index not found.");
+        }
+    }
+
+    private static void count(Context ctx) throws ParseException, IOException, QueryNodeException {
+        try (LuceneReader reader = lucene.getReader();) {
+            SearchResult hits = search(ctx.queryParam("query"));
+            String field = ctx.queryParam("field");
+            Map<String, Long> count = new HashMap<>();
+            for (int id: hits.ids) {
+                Document doc = reader.get(id);
+                String key = doc.get(field);
+                if (!count.containsKey(key)) count.put(key, 0l);
+                count.put(key, count.get(key) + 1);
+            }
+            ctx.json(count);
         } catch (IndexNotFoundException e) {
             logger.atWarn().log("index not found.");
         }
