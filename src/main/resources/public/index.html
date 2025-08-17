@@ -15,9 +15,6 @@
         display: flex;
         flex-direction: column;
       }
-      .p-tabs {
-        height: calc(100% - 58px);
-      }
       .p-tabpanels,.p-tabpanel-active {
         height: 100%;
       }
@@ -25,7 +22,7 @@
         height: 100%;
       }
       .p-datatable-table-container {
-        height: calc(100% - 58px - 1px);
+        height: calc(100% - 58px);
       }
       .p-datatable-tbody > tr > td {
         white-space: nowrap;
@@ -112,14 +109,14 @@
               <Button severity="help" icon="pi pi-cog" @click="showDialog = true" />
             </div>
           </div>
-          <Splitter style="height: 100%;">
+          <Splitter style="height: calc(100% - 58px);">
             <SplitterPanel :size="20" :minSize="10">
               <Tree
                 :value="tree.value"
                 :loading="realtime"
                 v-model:selectionKeys="tree.selectedKeys"
                 selectionMode="single"
-                style="height: 100%;"
+                style="height: 100%; overflow: auto;"
                 @nodeSelect="treeSelect"
                 @nodeUnselect="treeUnselect"
                 @nodeExpand="treeExpand"
@@ -405,7 +402,9 @@
             ).then(response => {
               var count = response.data;
               var total = Object.values(response.data).reduce((acc, x) => acc + x);
-              node.children = Object.keys(count).map(key => {
+              node.children = Object.keys(count).sort(
+                (a, b) => count[b] - count[a]
+              ).map(key => {
                 return {
                   key: crypto.randomUUID(),
                   label: key,
