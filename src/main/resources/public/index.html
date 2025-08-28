@@ -444,13 +444,13 @@
               query = `${query} AND day:["${y}-${m}-${d}" TO "${y}-${m}-${d}"]`;
             }
             if (this.$data.condition.host.length > 0) {
-              query = `${query} AND host:${this.$data.condition.host.join('|')}`;
+              query = `${query} AND (${this.$data.condition.host.map(x => `host:"${x}"`).join(' OR ')})`;
             }
             if (this.$data.condition.severity.length > 0) {
-              query = `${query} AND severity:${this.$data.condition.severity.join('|')}`;
+              query = `${query} AND (${this.$data.condition.severity.map(x => `severity:"${x}"`).join(' OR ')})`;
             }
             if (this.$data.condition.facility.length > 0) {
-              query = `${query} AND facility:${this.$data.condition.facility.join('|')}`;
+              query = `${query} AND (${this.$data.condition.facility.map(x => `facility:"${x}"`).join(' OR ')})`;
             }
             if (node) {
               if (node.data.key in this.$data.axis) {
