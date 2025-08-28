@@ -1,9 +1,14 @@
 package com.example;
 
+import java.io.BufferedReader;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -188,7 +193,7 @@ public class SyslogParser {
                 String month = mmm.get(parts[i++].toLowerCase());
                 String day   = parts[i++];
                 String time  = parts[i++];
-                String date  = String.format("%s %s %s %s", year, month, day, time);
+                String date  = String.format("%s %s %s %s", year, month, ("0" + day).substring(day.length() - 1), time);
                 data.date    = LocalDateTime.parse(date, DateTimeFormatter.ofPattern("yyyy MM dd HH:mm:ss"));
                 data.host    = parts[i++];
                 while (i < parts.length) {
@@ -222,10 +227,25 @@ public class SyslogParser {
         }
     }
 
-    public static void main(String[] args) throws SyslogParseException {
+    public static void main(String[] args) throws SyslogParseException, FileNotFoundException, IOException {
+        // TODO: RFCのとおりパースできないパターンがある
         for (String arg: args) {
-            Rfc3164 log = parse(arg);
-            System.out.println(log);
+            try (BufferedReader reader = new BufferedReader(new FileReader(arg))) {
+                while (true) {
+                    try {
+                        String line = reader.readLine();
+                        if (line == null || line.trim().isEmpty()) break;
+                        System.out.println(String.join("", Collections.nCopies(80, "=")));
+                        System.out.println(line);
+                        System.out.println(String.join("", Collections.nCopies(80, "-")));
+                        System.out.println(parse(line));
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                    System.out.println(String.join("", Collections.nCopies(80, "=")));
+                    System.out.println();
+                }
+            }
         }
     }
 }

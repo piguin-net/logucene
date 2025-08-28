@@ -23,6 +23,22 @@
             "request": "launch",
             "mainClass": "com.example.SyslogReceiver",
             "projectName": "logucene"
+        },
+        {
+            "type": "java",
+            "name": "SyslogParser(RFC3164)",
+            "request": "launch",
+            "mainClass": "com.example.SyslogParser",
+            "projectName": "logucene",
+            "args": "example-rfc3164.log"
+        },
+        {
+            "type": "java",
+            "name": "SyslogParser(RFC5424)",
+            "request": "launch",
+            "mainClass": "com.example.SyslogParser",
+            "projectName": "logucene",
+            "args": "example-rfc5424.log"
         }
     ]
 }
