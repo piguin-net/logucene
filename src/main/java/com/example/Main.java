@@ -159,8 +159,10 @@ public class Main
         ).before(
             ctx -> ctx.attribute("start", ZonedDateTime.now().toInstant().toEpochMilli())
         ).after(
-            ctx -> logger.atInfo().log("{} {}",
+            ctx -> logger.atInfo().log("{} {}:{} {}",
                 ZonedDateTime.now().toInstant().toEpochMilli() - ((long)ctx.attribute("start")),
+                ctx.req().getRemoteAddr(),
+                ctx.req().getRemotePort(),
                 ctx.fullUrl()
             )
         ).exception(Exception.class, (e, ctx) -> {
