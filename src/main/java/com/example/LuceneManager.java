@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
 import java.util.Map;
 
 import org.apache.lucene.analysis.Analyzer;
@@ -75,6 +76,12 @@ public class LuceneManager implements Closeable {
 
     public void add(Document doc) throws IOException {
         this.writer.addDocument(doc);
+        this.writer.flush();
+        this.writer.commit();
+    }
+
+    public void add(List<Document> docs) throws IOException {
+        this.writer.addDocuments(docs);
         this.writer.flush();
         this.writer.commit();
     }

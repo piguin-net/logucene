@@ -92,6 +92,12 @@
       <artifactId>sqlite-jdbc</artifactId>
       <version>3.50.3.0</version>
     </dependency>
+    <!-- https://mvnrepository.com/artifact/me.tongfei/progressbar -->
+    <dependency>
+      <groupId>me.tongfei</groupId>
+      <artifactId>progressbar</artifactId>
+      <version>0.10.1</version>
+    </dependency>
     <!-- https://mvnrepository.com/artifact/org.webjars.npm/primeicons -->
     <dependency>
       <groupId>org.webjars.npm</groupId>
@@ -168,7 +174,7 @@
   </dependencies>
 
   <build>
-		<plugins>
+    <plugins>
       <plugin>
         <artifactId>maven-assembly-plugin</artifactId>
         <version>3.6.0</version>
@@ -192,7 +198,7 @@
           </archive>
         </configuration>
       </plugin>
-		</plugins>
+    </plugins>
     <pluginManagement><!-- lock down plugins versions to avoid using Maven defaults (may be moved to parent pom) -->
       <plugins>
         <!-- clean lifecycle, see https://maven.apache.org/ref/current/maven-core/lifecycles.html#clean_Lifecycle -->

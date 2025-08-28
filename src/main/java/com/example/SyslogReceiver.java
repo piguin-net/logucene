@@ -10,6 +10,7 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -23,16 +24,26 @@ import org.apache.lucene.document.IntField;
 import org.apache.lucene.document.KeywordField;
 import org.apache.lucene.document.LongField;
 import org.apache.lucene.document.TextField;
+import org.apache.lucene.queryparser.classic.ParseException;
+import org.apache.lucene.queryparser.flexible.core.QueryNodeException;
 import org.apache.lucene.queryparser.flexible.standard.config.PointsConfig;
+import org.apache.lucene.search.ScoreDoc;
+import org.apache.lucene.search.Sort;
+import org.apache.lucene.search.SortField;
+import org.apache.lucene.search.SortedNumericSortField;
+import org.apache.lucene.search.TopDocs;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.spi.LoggingEventBuilder;
 
+import com.example.LuceneManager.LuceneReader;
 import com.example.SyslogParser.Facility;
 import com.example.SyslogParser.Rfc3164;
 import com.example.SyslogParser.Rfc5424;
 import com.example.SyslogParser.Severity;
 import com.example.SyslogParser.SyslogParseException;
+
+import me.tongfei.progressbar.ProgressBar;
 
 public class SyslogReceiver implements Runnable {
 
@@ -136,7 +147,9 @@ public class SyslogReceiver implements Runnable {
                         );
                     };
                     try {
-                        Document doc = this.parse(
+                        ZonedDateTime now = ZonedDateTime.now();
+                        Document doc = SyslogReceiver.parse(
+                            now,
                             packet.getAddress().getHostAddress(),
                             packet.getPort(),
                             message
@@ -166,14 +179,13 @@ public class SyslogReceiver implements Runnable {
         if (!this.socket.isClosed()) this.socket.close();
     }
 
-    private Document parse(String addr, int port, String message) throws InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException {
+    private static Document parse(ZonedDateTime timestamp, String addr, int port, String message) throws InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException {
         ZoneId userTimezone = ZoneId.of(System.getProperty("user.timezone"));
-        ZonedDateTime now = ZonedDateTime.now();
         Supplier<Document> init = () -> {
             Document doc = new Document();
             try {
                 doc.add(LuceneFieldKeys.raw.field(message));
-                doc.add(LuceneFieldKeys.timestamp.field(now.toInstant().toEpochMilli()));
+                doc.add(LuceneFieldKeys.timestamp.field(timestamp.toInstant().toEpochMilli()));
                 doc.add(LuceneFieldKeys.addr.field(addr));
                 doc.add(LuceneFieldKeys.port.field(port));
             } catch (Exception e) {
@@ -212,11 +224,50 @@ public class SyslogReceiver implements Runnable {
                 doc.add(LuceneFieldKeys.severity.field(Severity.of(priority).name()));
             }
             doc.add(LuceneFieldKeys.host.field(addr));
-            doc.add(LuceneFieldKeys.day.field(now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))));
-            doc.add(LuceneFieldKeys.time.field(now.format(DateTimeFormatter.ofPattern("HH:mm:ss"))));
+            doc.add(LuceneFieldKeys.day.field(timestamp.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))));
+            doc.add(LuceneFieldKeys.time.field(timestamp.format(DateTimeFormatter.ofPattern("HH:mm:ss"))));
             doc.add(LuceneFieldKeys.message.field(message));
             doc.add(LuceneFieldKeys.format.field("unknown"));
             return doc;
+        }
+    }
+
+    public static void main(String[] args) throws InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException, ClassNotFoundException, IOException, ParseException, QueryNodeException  {
+        try (
+            LuceneManager src = new LuceneManager(System.getProperty("lucene.migration.src", "index"));
+            LuceneManager dst = new LuceneManager(System.getProperty("lucene.migration.dst", "migrated"));
+            LuceneReader reader = src.getReader();
+        ) {
+            TopDocs hits = reader.search(
+                LuceneFieldKeys.message.name(),
+                "*:*",
+                new Sort(new SortedNumericSortField(
+                    LuceneFieldKeys.timestamp.name(),
+                    SortField.Type.LONG,
+                    true
+                )),
+                LuceneFieldKeys.getPointsConfig()
+            );
+            int chunk = Integer.getInteger("lucene.migration.chunk", 1000);
+            List<Document> docs = new ArrayList<>();
+            for (ScoreDoc score: ProgressBar.wrap(Arrays.asList(hits.scoreDocs), "migration")) {
+                ZonedDateTime now = ZonedDateTime.now();
+                Document srcDoc = reader.get(score.doc);
+                Document dstDoc = SyslogReceiver.parse(
+                    now,
+                    srcDoc.get(LuceneFieldKeys.addr.name()),
+                    Integer.valueOf(srcDoc.get(LuceneFieldKeys.port.name())),
+                    srcDoc.get(LuceneFieldKeys.raw.name())
+                );
+                docs.add(dstDoc);
+                if (docs.size() == chunk) {
+                    dst.add(docs);
+                    docs.clear();
+                }
+            }
+            if (docs.size() > 0) {
+                dst.add(docs);
+            }
         }
     }
     
