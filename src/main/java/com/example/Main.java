@@ -153,9 +153,9 @@ public class Main
         ).get(
             "/api/count", Main::count
         ).get(
-            "/api/download/sqlite", Main::sqlite
+            "/api/export/sqlite", Main::sqlite
         ).get(
-            "/api/download/excel", Main::excel
+            "/api/export/excel", Main::excel
         ).before(
             ctx -> ctx.attribute("start", ZonedDateTime.now().toInstant().toEpochMilli())
         ).after(
