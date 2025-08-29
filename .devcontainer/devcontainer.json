@@ -1,5 +1,21 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/java
 {
-    "image": "maven",
+    "name": "logucene",
+    // Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
+    "build": {
+        "dockerfile": "Dockerfile"
+    },
+
+    // "features": {}
+
+    // Use 'forwardPorts' to make a list of ports inside the container available locally.
+    "forwardPorts": [514, 8080],
+
+    // Use 'postCreateCommand' to run commands after the container is created.
+    // "postCreateCommand": "java -version",
+
+    // Configure tool-specific properties.
     "customizations": {
         "vscode": {
             "extensions": [
@@ -7,5 +23,7 @@
             ]
         }
     },
-    "forwardPorts": [514, 8080]
+
+    // Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
+    "remoteUser": "1000"
 }
