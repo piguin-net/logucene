@@ -72,7 +72,7 @@ public class Main
     private static SyslogReceiver watcher;
     private static Thread worker;
     private static Map<Integer, WsConnectContext> connections = new HashMap<>();
-    private static String script = System.getProperty("syslog.listener", null);
+    private static String script = Settings.getSyslogListener();
     private static ScriptEngineManager manager = new ScriptEngineManager();
     private static ScriptEngine engine = manager.getEngineByName("groovy");
 
@@ -85,8 +85,8 @@ public class Main
 
     static {
         try {
-            lucene = new LuceneManager(System.getProperty("lucene.index", "index"));
-            watcher = new SyslogReceiver(Integer.getInteger("syslog.port", 514), lucene);
+            lucene = new LuceneManager(Settings.getLuceneIndex());
+            watcher = new SyslogReceiver(Settings.getSyslogPort(), lucene);
             watcher.addEventListener(doc -> {
                 try {
                     List<Integer> deleteTargets = new ArrayList<>();
@@ -106,7 +106,7 @@ public class Main
                 }
             });
             watcher.addEventListener(doc -> {
-                if (script != null) {
+                if (script != null && !script.trim().isEmpty()) {
                     try (InputStream input = new FileInputStream(script);) {
                         BufferedReader reader = new BufferedReader(new InputStreamReader(input));
                         String source = reader.lines().collect(Collectors.joining("\n"));
@@ -133,11 +133,14 @@ public class Main
     }
 
     public static void main(String[] args) {
+        Settings.print();
         Javalin server = Javalin.create(config -> {
             config.staticFiles.add(staticFiles -> {
                 staticFiles.hostedPath = "/";
                 staticFiles.directory = "/public";
                 staticFiles.location = Location.CLASSPATH;
+                // staticFiles.directory = "/home/piguin/Workspace/logucene/src/main/resources/public";
+                // staticFiles.location = Location.EXTERNAL;
             });
             config.staticFiles.add(staticFiles -> {
                 staticFiles.hostedPath = "/webjars";
@@ -182,7 +185,7 @@ public class Main
                 logger.atError().addKeyValue("addr", ctx.host()).log("ws error.");
             });
         });
-        server.start(Integer.getInteger("web.port", 8080));
+        server.start(Settings.getWebPort());
     }
 
     private static Map<String, Object> convert(Document doc) {
@@ -354,7 +357,7 @@ public class Main
     private static void sqlite(Context ctx) throws IOException, ClassNotFoundException, SQLException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException, ParseException, QueryNodeException {
         SearchResult hits = search(ctx.queryParam("query"));
 
-        String clazz = System.getProperty("sqlite.analyzer", "org.apache.lucene.analysis.standard.StandardAnalyzer");
+        String clazz = Settings.getSqliteAnalyzer();
         Analyzer analyzer = (Analyzer) Class.forName(clazz).getDeclaredConstructor().newInstance();
 
         List<String> fields = Arrays.asList(

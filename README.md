@@ -21,7 +21,19 @@ sudo docker run --rm \
   -p 514:514/udp \
   -p 8080:8080 \
   openjdk:21 \
-  java -Duser.timezone=Asia/Tokyo -jar logucene-1.0-SNAPSHOT-jar-with-dependencies.jar
+  java -Dsystem.timezone=Asia/Tokyo -jar logucene-1.0-SNAPSHOT-jar-with-dependencies.jar
+```
+Dockerのイメージを作成して試す
+```
+sudo docker run --rm -v $PWD:/workdir --workdir /workdir --user `id -u`:`id -g` maven mvn package
+sudo docker build -t logucene --build-arg VERSION=1.0 .
+sudo docker run -it -d \
+  --name logucene \
+  --user `id -u`:`id -g` \
+  -v $PWD/index:/opt/logucene/index \
+  -p 514:514/udp \
+  -p 8080:8080 \
+  logucene
 ```
 
 # オプション
@@ -45,7 +57,7 @@ java \
 | lucene.index                      | luceneの保存先ディレクトリ                                                        | index                                                |
 | lucene.analyzer                   | luceneの全文検索に使用するアナライザ                                              | org.apache.lucene.analysis.standard.StandardAnalyzer |
 | sqlite.analyzer                   | SQLiteファイルダウンロード時に使用するアナライザ(トークナイザ)                    | org.apache.lucene.analysis.standard.StandardAnalyzer |
-| user.timezone                     | ブラウザで日時を表示する際に使用するタイムゾーン                                  | システムのタイムゾーン                               |
+| system.timezone                   | ブラウザで日時を表示する際に使用するタイムゾーン                                  | システムのタイムゾーン                               |
 | syslog.timezone                   | RFC3164フォーマットのログに含まれる日時をパースする際に使用するタイムゾーン(共通) | システムのタイムゾーン                               |
 | syslog.timezone[送信元IPアドレス] | RFC3164フォーマットのログに含まれる日時をパースする際に使用するタイムゾーン(個別) | システムのタイムゾーン                               |
 | syslog.listener                   | ログ受信時に実行したいGroovyスクリプトのファイルパス                              | (無し)                                               |

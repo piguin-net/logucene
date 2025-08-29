@@ -180,7 +180,7 @@ public class SyslogReceiver implements Runnable {
     }
 
     private static Document parse(ZonedDateTime timestamp, String addr, int port, String message) throws InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException {
-        ZoneId userTimezone = ZoneId.of(System.getProperty("user.timezone"));
+        ZoneId userTimezone = ZoneId.of(Settings.getUserTimezone());
         Supplier<Document> init = () -> {
             Document doc = new Document();
             try {
@@ -204,11 +204,7 @@ public class SyslogReceiver implements Runnable {
             if (log instanceof Rfc5424) {
                 syslogTimezone = ((Rfc5424) log).zone;
             } else {
-                syslogTimezone = ZoneId.of(
-                    System.getProperty("syslog.timezone[" + addr + "]",
-                    System.getProperty("syslog.timezone",
-                    System.getProperty("user.timezone")
-                )));
+                syslogTimezone = ZoneId.of(Settings.getSyslogTimezone(addr));
             }
             ZonedDateTime date = log.date.atZone(syslogTimezone);
             date = date.withZoneSameInstant(userTimezone);
