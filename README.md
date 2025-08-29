@@ -13,6 +13,7 @@ java -jar target/logucene-1.0-SNAPSHOT-jar-with-dependencies.jar
 ```
 Dockerで試す
 ```
+mkdir index
 sudo docker run --rm -v $PWD:/workdir --workdir /workdir --user `id -u`:`id -g` maven mvn package
 sudo docker run --rm \
   --user `id -u`:`id -g` \
@@ -25,10 +26,12 @@ sudo docker run --rm \
 ```
 Dockerのイメージを作成して試す
 ```
+mkdir index
 sudo docker run --rm -v $PWD:/workdir --workdir /workdir --user `id -u`:`id -g` maven mvn package
 sudo docker build -t logucene --build-arg VERSION=1.0 .
 sudo docker run -it -d \
   --name logucene \
+  --restart=always \
   --user `id -u`:`id -g` \
   -v $PWD/index:/opt/logucene/index \
   -p 514:514/udp \
