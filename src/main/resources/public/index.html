@@ -84,7 +84,7 @@
             </div>
             <div style="display: flex; width: calc(100% - 100px);">
               <IftaLabel>
-                <DatePicker ref="datePicker" v-model="condition.date" inputId="day" :disabled="realtime" dateFormat="yy-mm-dd" showIcon @update:modelValue="dateSelect" :inputStyle="{'width': '110px'}" />
+                <DatePicker ref="datePicker" v-model="condition.day" inputId="day" :disabled="realtime" dateFormat="yy-mm-dd" showIcon @update:modelValue="dateSelect" :inputStyle="{'width': '110px'}" />
                 <label for="day">Day</label>
               </IftaLabel>
               <IftaLabel>
@@ -229,7 +229,7 @@
               severity: [],
             },
             condition: {
-              date: null,
+              day: null,
               host: [],
               facility: [],
               severity: [],
@@ -437,10 +437,10 @@
           getQuery: function(node, query) {
             query = `(${query || this.$data.condition.query?.trim() || '*:*'})`;
             node = node || this.$data.tree.selected;
-            if (this.$data.condition.date != null) {
-              var y = this.$data.condition.date.getFullYear();
-              var m = ('0' + (this.$data.condition.date.getMonth() + 1)).slice(-2);
-              var d = ('0' + this.$data.condition.date.getDate()).slice(-2);
+            if (this.$data.condition.day != null) {
+              var y = this.$data.condition.day.getFullYear();
+              var m = ('0' + (this.$data.condition.day.getMonth() + 1)).slice(-2);
+              var d = ('0' + this.$data.condition.day.getDate()).slice(-2);
               query = `${query} AND day:["${y}-${m}-${d}" TO "${y}-${m}-${d}"]`;
             }
             if (this.$data.condition.host.length > 0) {
