@@ -30,7 +30,7 @@
             "request": "launch",
             "mainClass": "com.example.SyslogParser",
             "projectName": "logucene",
-            "args": "example-rfc3164.log"
+            "args": "example/rfc3164.log"
         },
         {
             "type": "java",
@@ -38,7 +38,7 @@
             "request": "launch",
             "mainClass": "com.example.SyslogParser",
             "projectName": "logucene",
-            "args": "example-rfc5424.log"
+            "args": "example/rfc5424.log"
         }
     ]
 }
