@@ -64,4 +64,5 @@ java \
 | syslog.timezone                   | SYSLOG_TIMEZONE                      | RFC3164フォーマットのログに含まれる日時をパースする際に使用するタイムゾーン(共通) | system.timezoneの値                                  |
 | syslog.timezone[送信元IPアドレス] | SYSLOG_TIMEZONE_送信元IPアドレス(※) | RFC3164フォーマットのログに含まれる日時をパースする際に使用するタイムゾーン(個別) | syslog.timezoneの値                                  |
 | syslog.listener                   | SYSLOG_LISTENER                      | ログ受信時に実行したいGroovyスクリプトのファイルパス                              | (無し)                                               |
+
 ※環境変数の送信元IPアドレスは"."(IPv4)及び":"(IPv6)を"_"へ置換して指定する
