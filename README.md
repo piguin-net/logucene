@@ -47,7 +47,7 @@ java \
   -Dlucene.index=index \
   -Dlucene.analyzer=org.apache.lucene.analysis.standard.StandardAnalyzer \
   -Dsqlite.analyzer=org.apache.lucene.analysis.standard.StandardAnalyzer \
-  -Duser.timezone=Asia/Tokyo \
+  -Dsystem.timezone=Asia/Tokyo \
   -Dsyslog.timezone=Asia/Tokyo \
   -Dsyslog.timezone[127.0.0.1]=Asia/Tokyo \
   -Dsyslog.listener=/path/to/script.groovy \
