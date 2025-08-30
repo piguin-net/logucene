@@ -16,7 +16,7 @@
             "request": "launch",
             "mainClass": "com.example.Main",
             "projectName": "logucene",
-            "vmArgs": "-Dweb.directory=src/main/resources/public -Dweb.location=EXTERNAL"
+            "vmArgs": "-Dweb.directory=src/main/resources/public -Dweb.location=EXTERNAL -Dsystem.timezone=Asia/Tokyo"
         },
         {
             "type": "java",
