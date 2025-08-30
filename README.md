@@ -60,7 +60,7 @@ java \
 | lucene.index                      | luceneの保存先ディレクトリ                                                        | index                                                |
 | lucene.analyzer                   | luceneの全文検索に使用するアナライザ                                              | org.apache.lucene.analysis.standard.StandardAnalyzer |
 | sqlite.analyzer                   | SQLiteファイルダウンロード時に使用するアナライザ(トークナイザ)                    | org.apache.lucene.analysis.standard.StandardAnalyzer |
-| system.timezone                   | ブラウザで日時を表示する際に使用するタイムゾーン                                  | システムのタイムゾーン                               |
-| syslog.timezone                   | RFC3164フォーマットのログに含まれる日時をパースする際に使用するタイムゾーン(共通) | システムのタイムゾーン                               |
-| syslog.timezone[送信元IPアドレス] | RFC3164フォーマットのログに含まれる日時をパースする際に使用するタイムゾーン(個別) | システムのタイムゾーン                               |
+| system.timezone                   | ブラウザで日時を表示する際に使用するタイムゾーン                                  | System.getProperty("user.timezone")                  |
+| syslog.timezone                   | RFC3164フォーマットのログに含まれる日時をパースする際に使用するタイムゾーン(共通) | system.timezoneの値                                  |
+| syslog.timezone[送信元IPアドレス] | RFC3164フォーマットのログに含まれる日時をパースする際に使用するタイムゾーン(個別) | syslog.timezoneの値                                  |
 | syslog.listener                   | ログ受信時に実行したいGroovyスクリプトのファイルパス                              | (無し)                                               |
