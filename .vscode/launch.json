@@ -15,7 +15,8 @@
             "name": "Main",
             "request": "launch",
             "mainClass": "com.example.Main",
-            "projectName": "logucene"
+            "projectName": "logucene",
+            "vmArgs": "-Dweb.directory=src/main/resources/public -Dweb.location=EXTERNAL"
         },
         {
             "type": "java",

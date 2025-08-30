@@ -135,17 +135,11 @@ public class Main
     public static void main(String[] args) {
         Settings.print();
         Javalin server = Javalin.create(config -> {
+            config.staticFiles.enableWebjars();
             config.staticFiles.add(staticFiles -> {
                 staticFiles.hostedPath = "/";
-                staticFiles.directory = "/public";
-                staticFiles.location = Location.CLASSPATH;
-                // staticFiles.directory = "/home/piguin/Workspace/logucene/src/main/resources/public";
-                // staticFiles.location = Location.EXTERNAL;
-            });
-            config.staticFiles.add(staticFiles -> {
-                staticFiles.hostedPath = "/webjars";
-                staticFiles.directory = "/META-INF/resources/webjars";
-                staticFiles.location = Location.CLASSPATH;
+                staticFiles.directory = System.getProperty("web.directory", "/public");
+                staticFiles.location = Location.valueOf(System.getProperty("web.location", "CLASSPATH"));
             });
         }).get(
             "/api/search", ctx -> ctx.json(search(ctx.queryParam("query")))
