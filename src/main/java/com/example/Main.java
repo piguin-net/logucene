@@ -143,6 +143,7 @@ public class Main
                 hosts.add(doc.get(LuceneFieldKeys.host.name()));
             }
         }
+        // TODO: 認証(https://javalin.io/tutorials/auth-example)
         Javalin server = Javalin.create(config -> {
             config.staticFiles.enableWebjars();
             config.staticFiles.add(staticFiles -> {
