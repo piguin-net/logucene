@@ -8,9 +8,9 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -122,7 +122,7 @@ public class SyslogParser {
         public String  app;
         public String  procid;
         public String  msgid;
-        public Map<String, String> structured;
+        public List<String> structured;
         public Rfc5424(Integer priority) {
             super(priority);
             this.format = "rfc5424";
@@ -201,14 +201,13 @@ public class SyslogParser {
         data.app           = parts.get(i++);
         data.procid        = parts.get(i++);
         data.msgid         = parts.get(i++);
-        data.structured    = new LinkedHashMap<>();
+        data.structured    = new ArrayList<>();
         if (!"-".equals(parts.get(i))) {
             while (i < parts.size()) {
                 String part = parts.get(i);
                 if (part.startsWith("[")) part = part.substring(1);
                 if (part.endsWith("]")) part = part.substring(0, part.length() - 1);
-                String[] kv = part.split("=");
-                data.structured.put(kv[0], kv[1]);
+                data.structured.add(part);
                 if (parts.get(i).endsWith("]")) break;
                 i++;
             }
