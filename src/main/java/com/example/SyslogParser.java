@@ -8,8 +8,10 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import lombok.ToString;
@@ -150,9 +152,8 @@ public class SyslogParser {
 
     public static Rfc3164 parse(String log) throws SyslogParseException {
         try {
-            Map.Entry<Integer, String> priority = parsePriority(log);
-            String[] parts = priority.getValue().split(" ");
-            if (isNumber(parts[0])) {
+            Map.Entry<Integer, List<String>> priority = parsePriority(log);
+            if (isNumber(priority.getValue().get(0))) {
                 // RFC5424
                 return parseRfc5424(priority);
             } else {
@@ -164,69 +165,74 @@ public class SyslogParser {
         }
     }
 
-    public static Rfc3164 parseRfc3164(Map.Entry<Integer, String> priority) {
+    // TODO: ちゃんとパースする
+    public static Rfc3164 parseRfc3164(Map.Entry<Integer, List<String>> priority) {
         int i = 0;
-        String[] parts = priority.getValue().split(" ");
-        Rfc3164 data = new Rfc3164(priority.getKey());
-        String year  = "" + LocalDateTime.now().getYear();
-        String month = mmm.get(parts[i++].toLowerCase());
-        String day   = parts[i++];
-        String time  = parts[i++];
-        String date  = String.format("%s %s %s %s", year, month, ("0" + day).substring(day.length() - 1), time);
-        data.date    = LocalDateTime.parse(date, DateTimeFormatter.ofPattern("yyyy MM dd HH:mm:ss"));
-        data.host    = parts[i++];
-        while (i < parts.length) {
+        List<String> parts = priority.getValue();
+        Rfc3164 data       = new Rfc3164(priority.getKey());
+        String year        = "" + LocalDateTime.now().getYear();
+        String month       = mmm.get(parts.get(i++).toLowerCase());
+        String day         = parts.get(i++);
+        String time        = parts.get(i++);
+        String date        = String.format("%s %s %s %s", year, month, ("0" + day).substring(day.length() - 1), time);
+        data.date          = LocalDateTime.parse(date, DateTimeFormatter.ofPattern("yyyy MM dd HH:mm:ss"));
+        data.host          = parts.get(i++);
+        while (i < parts.size()) {
             if (data.message == null) {
-                data.message = parts[i];
+                data.message = parts.get(i);
             } else {
-                data.message = data.message + " " + parts[i];
+                data.message = data.message + " " + parts.get(i);
             }
             i++;
         }
         return data;
     }
 
-    public static Rfc5424 parseRfc5424(Map.Entry<Integer, String> priority) {
+    // TODO: ちゃんとパースする
+    public static Rfc5424 parseRfc5424(Map.Entry<Integer, List<String>> priority) {
         int i = 0;
-        String[] parts = priority.getValue().split(" ");
-        Rfc5424 data    = new Rfc5424(priority.getKey());
-        data.version    = Integer.valueOf(parts[i++]);
-        ZonedDateTime date = ZonedDateTime.parse(parts[i++]);
-        data.date       = date.toLocalDateTime();
-        data.zone       = date.getZone();
-        data.host       = parts[i++];
-        data.app        = parts[i++];
-        data.procid     = parts[i++];
-        data.msgid      = parts[i++];
-        data.structured = new LinkedHashMap<>();
-        if (!"-".equals(parts[i])) {
-            while (i < parts.length) {
-                String part = parts[i];
+        List<String> parts = priority.getValue();
+        Rfc5424 data       = new Rfc5424(priority.getKey());
+        data.version       = Integer.valueOf(parts.get(i++));
+        ZonedDateTime date = ZonedDateTime.parse(parts.get(i++));
+        data.date          = date.toLocalDateTime();
+        data.zone          = date.getZone();
+        data.host          = parts.get(i++);
+        data.app           = parts.get(i++);
+        data.procid        = parts.get(i++);
+        data.msgid         = parts.get(i++);
+        data.structured    = new LinkedHashMap<>();
+        if (!"-".equals(parts.get(i))) {
+            while (i < parts.size()) {
+                String part = parts.get(i);
                 if (part.startsWith("[")) part = part.substring(1);
                 if (part.endsWith("]")) part = part.substring(0, part.length() - 1);
                 String[] kv = part.split("=");
                 data.structured.put(kv[0], kv[1]);
-                if (parts[i].endsWith("]")) break;
+                if (parts.get(i).endsWith("]")) break;
                 i++;
             }
         }
         i++;
-        while (i < parts.length) {
+        while (i < parts.size()) {
             if (data.message == null) {
-                data.message = parts[i];
+                data.message = parts.get(i);
             } else {
-                data.message = data.message + " " + parts[i];
+                data.message = data.message + " " + parts.get(i);
             }
             i++;
         }
         return data;
     }
 
-    public static Map.Entry<Integer, String> parsePriority(String log) {
+    public static Map.Entry<Integer, List<String>> parsePriority(String log) {
         int start = log.indexOf("<");
         int end   = log.indexOf(">");
         String priority = log.substring(start + 1, end);
-        return Map.entry(Integer.valueOf(priority), log.substring(end + 1));
+        return Map.entry(
+            Integer.valueOf(priority),
+            Arrays.asList(log.substring(end + 1).split(" ")).stream().filter(x -> !x.isEmpty()).toList()
+        );
     }
 
     private static boolean isNumber(String value) {
