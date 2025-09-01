@@ -148,6 +148,7 @@ public class SyslogReceiver implements Runnable {
                         );
                     };
                     try {
+                        // TODO; バッファリング
                         ZonedDateTime now = ZonedDateTime.now();
                         Document doc = SyslogReceiver.parse(
                             now,

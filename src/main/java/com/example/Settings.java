@@ -1,5 +1,8 @@
 package com.example;
 
+import java.util.HashMap;
+import java.util.Map;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -99,5 +102,18 @@ public class Settings {
         logger.info("  system.timezone=" + getUserTimezone());
         logger.info("  syslog.timezone=" + getSyslogTimezone());
         logger.info("  syslog.listener=" + getSyslogListener());
+    }
+
+    public static Map<String, Object> get() {
+        return new HashMap<>() {{
+            this.put("syslog.port", getSyslogPort());
+            this.put("web.port", getWebPort());
+            this.put("lucene.index", getLuceneIndex());
+            this.put("lucene.analyzer", getLuceneAnalyzer());
+            this.put("sqlite.analyzer", getSqliteAnalyzer());
+            this.put("system.timezone", getUserTimezone());
+            this.put("syslog.timezone", getSyslogTimezone());
+            this.put("syslog.listener", getSyslogListener());
+        }};
     }
 }

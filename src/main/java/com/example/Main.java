@@ -225,6 +225,7 @@ public class Main
     private static void config(Context ctx) throws ParseException, IOException, QueryNodeException {
         Map<String, Object> result = new HashMap<>() {{
             SearchResult hits = search("*:*");
+            this.put("settings", Settings.get());
             this.put("facility", Arrays.asList(Facility.values()).stream().map(item -> item.name()).toList());
             this.put("severity", Arrays.asList(Severity.values()).stream().map(item -> item.name()).toList());
             this.put("host", new HashSet<>() {{
@@ -313,6 +314,7 @@ public class Main
         }
     }
 
+    // TODO: Excelではなくcsv.gz
     private static void excel(Context ctx) throws IOException, ClassNotFoundException, SQLException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException, ParseException, QueryNodeException {
         SearchResult hits = search(ctx.queryParam("query"));
 
@@ -348,6 +350,7 @@ public class Main
         }
     }
 
+    // TODO; 時間が掛かるためジョブ化
     private static void sqlite(Context ctx) throws IOException, ClassNotFoundException, SQLException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException, ParseException, QueryNodeException {
         SearchResult hits = search(ctx.queryParam("query"));
 
