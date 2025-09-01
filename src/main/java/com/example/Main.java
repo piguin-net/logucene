@@ -386,12 +386,15 @@ public class Main
         ) {
             connection.setAutoCommit(false);
             statement.execute(ddl);
-            try (LuceneReader reader = lucene.getReader();) {
-                for (int id: hits.ids) {
+            try (
+                LuceneReader reader = lucene.getReader();
+                PreparedStatement insert = connection.prepareStatement(dml);
+            ) {
+                for (int count = 0; count < hits.ids.size(); count++) {
+                    int id = hits.ids.get(count);
                     Document doc = reader.get(id);
                     String message = doc.get(LuceneFieldKeys.message.name());
                     try (
-                        PreparedStatement insert = connection.prepareStatement(dml);
                         TokenStream tokenizer = analyzer.tokenStream(
                             LuceneFieldKeys.message.name(),
                             message
@@ -413,9 +416,16 @@ public class Main
                             insert.setString(i++, doc.get(fields.get(j++)));
                         }
                         insert.setString(i++, tokens);
-                        insert.execute();
+                        insert.addBatch();
+                        // TODO: マジックナンバー
+                        if (count % 1000 == 0) {
+                            insert.executeBatch();
+                            insert.clearBatch();
+                        }
                     }
                 }
+                insert.executeBatch();
+                insert.clearBatch();
             }
             connection.commit();
             ctx.contentType(
