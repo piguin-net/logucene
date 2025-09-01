@@ -11,6 +11,7 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -200,12 +201,9 @@ public class SyslogReceiver implements Runnable {
             doc.add(LuceneFieldKeys.severity.field(log.severity.name()));
             doc.add(LuceneFieldKeys.host.field(log.host));
             doc.add(LuceneFieldKeys.message.field(log.message));
-            ZoneId syslogTimezone;
-            if (log instanceof Rfc5424) {
-                syslogTimezone = ((Rfc5424) log).zone;
-            } else {
-                syslogTimezone = ZoneId.of(Settings.getSyslogTimezone(addr));
-            }
+            ZoneId syslogTimezone = log instanceof Rfc5424
+                ? ((Rfc5424) log).zone
+                : ZoneId.of(Settings.getSyslogTimezone(addr));
             ZonedDateTime date = log.date.atZone(syslogTimezone);
             date = date.withZoneSameInstant(userTimezone);
             doc.add(LuceneFieldKeys.day.field(date.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))));
@@ -220,8 +218,8 @@ public class SyslogReceiver implements Runnable {
                 doc.add(LuceneFieldKeys.severity.field(Severity.of(priority).name()));
             }
             doc.add(LuceneFieldKeys.host.field(addr));
-            doc.add(LuceneFieldKeys.day.field(timestamp.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))));
-            doc.add(LuceneFieldKeys.time.field(timestamp.format(DateTimeFormatter.ofPattern("HH:mm:ss"))));
+            doc.add(LuceneFieldKeys.day.field(timestamp.withZoneSameInstant(userTimezone).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))));
+            doc.add(LuceneFieldKeys.time.field(timestamp.withZoneSameInstant(userTimezone).format(DateTimeFormatter.ofPattern("HH:mm:ss"))));
             doc.add(LuceneFieldKeys.message.field(message));
             doc.add(LuceneFieldKeys.format.field("unknown"));
             return doc;
@@ -246,11 +244,12 @@ public class SyslogReceiver implements Runnable {
             );
             int chunk = Integer.getInteger("lucene.migration.chunk", 1000);
             List<Document> docs = new ArrayList<>();
+            ZoneId userTimezone = ZoneId.of(Settings.getUserTimezone());
             for (ScoreDoc score: ProgressBar.wrap(Arrays.asList(hits.scoreDocs), "migration")) {
-                ZonedDateTime now = ZonedDateTime.now();
                 Document srcDoc = reader.get(score.doc);
+                long timestamp = Long.valueOf(srcDoc.get(LuceneFieldKeys.timestamp.name()));
                 Document dstDoc = SyslogReceiver.parse(
-                    now,
+                    ZonedDateTime.ofInstant(new Date(timestamp).toInstant(), userTimezone),
                     srcDoc.get(LuceneFieldKeys.addr.name()),
                     Integer.valueOf(srcDoc.get(LuceneFieldKeys.port.name())),
                     srcDoc.get(LuceneFieldKeys.raw.name())
