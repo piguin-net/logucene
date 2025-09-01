@@ -229,7 +229,7 @@ public class Main
                 try (LuceneReader reader = lucene.getReader();) {
                     for (int id: hits.ids) {
                         Document doc = reader.get(id);
-                        this.add(doc.get("host"));
+                        this.add(doc.get(LuceneFieldKeys.host.name()));
                     }
                 }
             }});
