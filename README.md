@@ -9,7 +9,7 @@ luceneを使ってみたかったため、転職活動の一環として、こ�
 ローカルで試す
 ```
 mvn package
-java -jar target/logucene-1.0-SNAPSHOT-jar-with-dependencies.jar
+java -jar target/logucene-1.1-SNAPSHOT-jar-with-dependencies.jar
 ```
 Dockerで試す
 ```
@@ -22,13 +22,13 @@ sudo docker run --rm \
   -p 514:514/udp \
   -p 8080:8080 \
   openjdk:21 \
-  java -Dsystem.timezone=Asia/Tokyo -jar logucene-1.0-SNAPSHOT-jar-with-dependencies.jar
+  java -Dsystem.timezone=Asia/Tokyo -jar logucene-1.1-SNAPSHOT-jar-with-dependencies.jar
 ```
 Dockerのイメージを作成して試す
 ```
 mkdir index
 sudo docker run --rm -v $PWD:/workdir --workdir /workdir --user `id -u`:`id -g` maven mvn package
-sudo docker build -t logucene --build-arg VERSION=1.0 .
+sudo docker build -t logucene --build-arg VERSION=1.1 .
 sudo docker run -it -d \
   --name logucene \
   --restart=always \
@@ -51,7 +51,7 @@ java \
   -Dsyslog.timezone=Asia/Tokyo \
   -Dsyslog.timezone[127.0.0.1]=Asia/Tokyo \
   -Dsyslog.listener=/path/to/script.groovy \
-  -jar target/logucene-1.0-SNAPSHOT-jar-with-dependencies.jar
+  -jar target/logucene-1.1-SNAPSHOT-jar-with-dependencies.jar
 ```
 | SystemProperty                    | 環境変数                             | Value                                                                             | Default                                              |
 | --------------------------------- | ------------------------------------ | --------------------------------------------------------------------------------- | ---------------------------------------------------- |
