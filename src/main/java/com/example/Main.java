@@ -1,13 +1,13 @@
 package com.example;
 
 import java.io.BufferedReader;
-import java.io.ByteArrayOutputStream;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
+import java.io.PrintWriter;
 import java.lang.reflect.InvocationTargetException;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -21,6 +21,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.zip.GZIPOutputStream;
 
@@ -39,10 +40,6 @@ import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.SortedNumericSortField;
 import org.apache.lucene.search.TopDocs;
-import org.apache.poi.ss.usermodel.Row;
-import org.apache.poi.ss.usermodel.Sheet;
-import org.apache.poi.ss.usermodel.Workbook;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -152,7 +149,7 @@ public class Main
         ).get(
             "/api/export/sqlite", Main::sqlite
         ).get(
-            "/api/export/excel", Main::excel
+            "/api/export/tsv", Main::tsv
         ).before(
             ctx -> ctx.attribute("start", ZonedDateTime.now().toInstant().toEpochMilli())
         ).after(
@@ -314,43 +311,50 @@ public class Main
         }
     }
 
-    // TODO: Excelではなくcsv.gz
-    private static void excel(Context ctx) throws IOException, ClassNotFoundException, SQLException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException, ParseException, QueryNodeException {
+    private static void tsv(Context ctx) throws IOException, ClassNotFoundException, SQLException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException, ParseException, QueryNodeException {
         SearchResult hits = search(ctx.queryParam("query"));
-
-        try (Workbook book = new XSSFWorkbook();) {
-            Sheet sheet = book.createSheet();
-            int x = 0;
-            int y = 0;
-            Row header = sheet.createRow(y++);
-            header.createCell(x++).setCellValue("id");
-            for (LuceneFieldKeys field: LuceneFieldKeys.values()) {
-                header.createCell(x++).setCellValue(field.name());
-            }
-            try (LuceneReader reader = lucene.getReader();) {
+        PipedInputStream pin = new PipedInputStream();
+        new Thread(() -> {
+            try (
+                PrintWriter writer = new PrintWriter(new GZIPOutputStream(new PipedOutputStream(pin)));
+                LuceneReader reader = lucene.getReader();
+            ) {
+                Function<List<String>, String> format = row -> row.stream().map(
+                    cell -> cell.replace("\r", "\\r")
+                ).map(
+                    cell -> cell.replace("\n", "\\n")
+                ).map(
+                    cell -> cell.replace("\t", "\\t")
+                ).collect(
+                    Collectors.joining("\t")
+                );
+                List<String> header = new ArrayList<>();
+                for (LuceneFieldKeys field: LuceneFieldKeys.values()) {
+                    header.add(field.name());
+                }
+                writer.println(format.apply(header));
                 for (int id: hits.ids) {
                     Document doc = reader.get(id);
-                    x = 0;
-                    Row row = sheet.createRow(y++);
-                    row.createCell(x++).setCellValue(id);
+                    List<String> line = new ArrayList<>();
                     for (LuceneFieldKeys field: LuceneFieldKeys.values()) {
-                        row.createCell(x++).setCellValue(doc.get(field.name()));
+                        line.add(doc.get(field.name()));
                     }
+                    writer.println(format.apply(line));
                 }
+            } catch (Exception e) {
+                throw new RuntimeException(e);
             }
-            ByteArrayOutputStream buf = new ByteArrayOutputStream();
-            book.write(buf);
-            ctx.contentType(
-                "application/octet-stream"
-            ).header(
-                "Content-Disposition", "attachment; filename=\"logucene.xlsx\""
-            ).result(
-                buf.toByteArray()
-            );
-        }
+        }).start();
+        ctx.contentType(
+            "application/octet-stream"
+        ).header(
+            "Content-Disposition", "attachment; filename=\"logucene.tsv.gz\""
+        ).result(
+            pin
+        );
     }
 
-    // TODO; 時間が掛かるためジョブ化
+    // TODO; 時間が掛かるためジョブまたはCLI
     private static void sqlite(Context ctx) throws IOException, ClassNotFoundException, SQLException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException, ParseException, QueryNodeException {
         SearchResult hits = search(ctx.queryParam("query"));
 

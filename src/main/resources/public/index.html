@@ -524,7 +524,7 @@
           download: function() {
             var a = document.createElement('a');
             a.target = '_blank';
-            a.href = `/api/export/sqlite?query=${encodeURIComponent(this.getQuery())}`;
+            a.href = `/api/export/tsv?query=${encodeURIComponent(this.getQuery())}`;
             a.click();
           },
           switchRealTimeMode() {
