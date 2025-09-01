@@ -21,6 +21,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.zip.GZIPOutputStream;
@@ -72,6 +73,8 @@ public class Main
     private static String script = Settings.getSyslogListener();
     private static ScriptEngineManager manager = new ScriptEngineManager();
     private static ScriptEngine engine = manager.getEngineByName("groovy");
+    // TODO: indexからユニークな値を取得できないか
+    private static Set<String> hosts = new HashSet<>();
 
     public static class SearchResult {
         public String query;
@@ -114,6 +117,9 @@ public class Main
                     }
                 }
             });
+            watcher.addEventListener(doc -> {
+                hosts.add(doc.get(LuceneFieldKeys.host.name()));
+            });
             worker = new Thread(watcher);
             worker.start();
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -129,8 +135,14 @@ public class Main
         }
     }
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws IOException, ParseException, QueryNodeException {
         Settings.print();
+        try (LuceneReader reader = lucene.getReader();) {
+            for (int id: search("*:*").ids) {
+                Document doc = reader.get(id);
+                hosts.add(doc.get(LuceneFieldKeys.host.name()));
+            }
+        }
         Javalin server = Javalin.create(config -> {
             config.staticFiles.enableWebjars();
             config.staticFiles.add(staticFiles -> {
@@ -221,18 +233,10 @@ public class Main
 
     private static void config(Context ctx) throws ParseException, IOException, QueryNodeException {
         Map<String, Object> result = new HashMap<>() {{
-            SearchResult hits = search("*:*");
             this.put("settings", Settings.get());
             this.put("facility", Arrays.asList(Facility.values()).stream().map(item -> item.name()).toList());
             this.put("severity", Arrays.asList(Severity.values()).stream().map(item -> item.name()).toList());
-            this.put("host", new HashSet<>() {{
-                try (LuceneReader reader = lucene.getReader();) {
-                    for (int id: hits.ids) {
-                        Document doc = reader.get(id);
-                        this.add(doc.get(LuceneFieldKeys.host.name()));
-                    }
-                }
-            }});
+            this.put("host", hosts);
         }};
         ctx.json(result);
     }
