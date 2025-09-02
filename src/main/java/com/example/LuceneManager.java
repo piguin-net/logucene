@@ -40,19 +40,18 @@ public class LuceneManager implements Closeable {
         public LuceneReader(String path, Analyzer analyzer) throws IOException {
             FSDirectory dir = FSDirectory.open(Paths.get(path));
             this.reader = DirectoryReader.open(dir);
-            this.searcher = new IndexSearcher(reader);
+            this.searcher = new IndexSearcher(this.reader);
             this.analyzer = analyzer;
         }
 
         public TopDocs search(String field, String query, Sort order, Map<String, PointsConfig> pointsConfig) throws ParseException, IOException, QueryNodeException {
-            IndexSearcher searcher = new IndexSearcher(reader);
             StandardQueryParser parser = new StandardQueryParser(this.analyzer);
             parser.setPointsConfigMap(pointsConfig);
-            return searcher.search(parser.parse(query, field), Integer.MAX_VALUE, order);
+            return this.searcher.search(parser.parse(query, field), Integer.MAX_VALUE, order);
         }
 
         public Document get(Integer id) throws IOException {
-            StoredFields storedFields = searcher.storedFields();
+            StoredFields storedFields = this.searcher.storedFields();
             return storedFields.document(id);
         } 
 
