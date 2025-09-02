@@ -19,7 +19,7 @@ sudo docker run --rm \
   --user `id -u`:`id -g` \
   --workdir /opt/logucene \
   -v $PWD/target:/opt/logucene \
-  -p 514:514/udp \
+  -p 514:2514/udp \
   -p 8080:8080 \
   openjdk:21 \
   java -Dsystem.timezone=Asia/Tokyo -jar logucene-1.1-SNAPSHOT-jar-with-dependencies.jar
@@ -34,7 +34,21 @@ sudo docker run -it -d \
   --restart=always \
   --user `id -u`:`id -g` \
   -v $PWD/index:/opt/logucene/index \
-  -p 514:514/udp \
+  -p 514:2514/udp \
+  -p 8080:8080 \
+  logucene
+```
+Podmanのイメージを作成して試す
+```
+mkdir index
+podman run --rm -v $PWD:/workdir --workdir /workdir maven mvn package
+sudo podman build -t logucene .
+sudo podman run -it -d \
+  --name logucene \
+  --restart=always \
+  --user `id -u`:`id -g` \
+  -v $PWD/index:/opt/logucene/index \
+  -p 514:2514/udp \
   -p 8080:8080 \
   logucene
 ```
@@ -42,7 +56,7 @@ sudo docker run -it -d \
 # オプション
 ```
 java \
-  -Dsyslog.port=514 \
+  -Dsyslog.port=2514 \
   -Dweb.port=8080 \
   -Dlucene.index=index \
   -Dlucene.analyzer=org.apache.lucene.analysis.standard.StandardAnalyzer \
@@ -55,7 +69,7 @@ java \
 ```
 | SystemProperty                    | 環境変数                             | Value                                                                             | Default                                              |
 | --------------------------------- | ------------------------------------ | --------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| syslog.port                       | SYSLOG_PORT                          | syslogの受信ポート(UDP)                                                           | 1514                                                 |
+| syslog.port                       | SYSLOG_PORT                          | syslogの受信ポート(UDP)                                                           | 2514                                                 |
 | web.port                          | WEB_PORT                             | webサーバの待受ポート                                                             | 8080                                                 |
 | lucene.index                      | LUCENE_INDEX                         | luceneの保存先ディレクトリ                                                        | index                                                |
 | lucene.analyzer                   | LUCENE_ANALYZER                      | luceneの全文検索に使用するアナライザ                                              | org.apache.lucene.analysis.standard.StandardAnalyzer |

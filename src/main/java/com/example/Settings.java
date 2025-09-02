@@ -15,7 +15,7 @@ public class Settings {
             "syslog.port",
             System.getenv().containsKey("SYSLOG_PORT")
                 ? System.getenv("SYSLOG_PORT")
-                : "514"
+                : "2514"
         ));
     }
 

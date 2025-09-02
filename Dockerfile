@@ -12,6 +12,6 @@ ENV SYSTEM_TIMEZONE=Asia/Tokyo
 ENV SYSLOG_TIMEZONE=Asia/Tokyo
 ENV SYSLOG_LISTENER=
 
-EXPOSE 514/udp 8080
+EXPOSE 2514/udp 8080
 
 CMD ["java", "-jar", "/opt/logucene/logucene.jar"]
