@@ -404,9 +404,9 @@
               var total = Object.values(response.data).reduce((acc, x) => acc + x);
               node.children = Object.keys(count).sort(
                 (a, b) => count[b] - count[a]
-              ).map(key => {
+              ).map((key, i) => {
                 return {
-                  key: crypto.randomUUID(),
+                  key: `${node.key}-${i}`,
                   label: key,
                   data: {
                     'key': field,
@@ -476,7 +476,7 @@
               () => this.showChart()
             ).then(() => {
               this.$data.tree.value = [{
-                key: crypto.randomUUID(),
+                key: 0,
                 label: 'ALL',
                 data: {
                   'key': '*',
