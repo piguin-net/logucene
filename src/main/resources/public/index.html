@@ -262,42 +262,43 @@
               'day': {
                 query: value => `day:["${value}" TO "${value}"]`,
                 format: log => log.day,
-                collect: data => [...new Set(data.map(row => row.day))].sort()
+                align: data => [...new Set(data.map(row => row.day))].sort()
               },
               'time': {
                 query: value => `time:["${value}:00:00" TO "${value}:59:59"]`,
                 format: log => log.time.slice(0, 2),
-                collect: data => [...Array(24)].map((_, i) => ('0' + i).slice(-2))
+                align: data => [...Array(24)].map((_, i) => ('0' + i).slice(-2))
               },
               'host': {
                 query: value => `host:"${value}"`,
                 format: log => log.host,
-                collect: data => [...new Set(data.map(row => row.host))].sort()
+                align: data => [...new Set(data.map(row => row.host))].sort()
               },
               'format': {
                 query: value => `format:"${value}"`,
                 format: log => log.format,
-                collect: data => ['unknown', 'rfc3164', 'rfc5424']
+                align: data => ['unknown', 'rfc3164', 'rfc5424']
               },
               'addr': {
                 query: value => `addr:"${value}"`,
                 format: log => log.addr,
-                collect: data => [...new Set(data.map(row => row.addr))].sort()
+                align: data => [...new Set(data.map(row => row.addr))].sort()
               },
-              'port': {
-                query: value => `port:${value}`,
-                format: log => log.port,
-                collect: data => [...new Set(data.map(row => row.port))].sort()
-              },
+              // TODO: 数値はcount未対応
+              // 'port': {
+              //   query: value => `port:${value}`,
+              //   format: log => log.port,
+              //   align: data => [...new Set(data.map(row => row.port))].sort()
+              // },
               'facility': {
                 query: value => `facility:"${value}"`,
                 format: log => log.facility,
-                collect: data => this.$data.config.facility
+                align: data => this.$data.config.facility
               },
               'severity': {
                 query: value => `severity:"${value}"`,
                 format: log => log.severity,
-                collect: data => this.$data.config.severity
+                align: data => this.$data.config.severity
               },
             },
             barchart: {
@@ -317,7 +318,7 @@
                 'time',
                 'format',
                 'addr',
-                'port',
+                // 'port',  TODO: 数値はcount未対応
                 'facility',
               ]],
             }
@@ -580,14 +581,8 @@
               );
               return promise.then(response => {
                 var barchart = this.$data.barchart.instance || echarts.init(this.$refs.barchart);
-                var yaxis = {
-                  format: this.$data.axis[this.$data.barchart.yaxis].format,
-                  list: (this.$data.axis[this.$data.barchart.yaxis].collect)(response.data.docs)
-                };
-                var xaxis = {
-                  format: this.$data.axis[this.$data.barchart.xaxis].format,
-                  list: (this.$data.axis[this.$data.barchart.xaxis].collect)(response.data.docs)
-                };
+                var yaxis = this.$data.axis[this.$data.barchart.yaxis];
+                var xaxis = this.$data.axis[this.$data.barchart.xaxis];
                 if (!this.$data.barchart.instance) {
                   this.$data.barchart.instance = barchart;
                   barchart.on('dblclick', (event) => {
@@ -601,9 +596,9 @@
                   });
                 }
                 var count = {};
-                for (var y of yaxis.list) {
+                for (var y of yaxis.align(response.data.docs)) {
                   count[y] = {};
-                  for (var x of xaxis.list) {
+                  for (var x of xaxis.align(response.data.docs)) {
                     count[y][x] = 0;
                   }
                 }
@@ -623,9 +618,9 @@
                   },
                   yAxis: {
                     type: 'category',
-                    data: yaxis.list
+                    data: yaxis.align(response.data.docs)
                   },
-                  series: xaxis.list.map(x => {
+                  series: xaxis.align(response.data.docs).map(x => {
                     return  {
                       name: x,
                       type: 'bar',
@@ -636,7 +631,7 @@
                       emphasis: {
                         focus: 'series'
                       },
-                      data: yaxis.list.map(y => count[y][x])
+                      data: yaxis.align(response.data.docs).map(y => count[y][x])
                     };
                   })
                 };
