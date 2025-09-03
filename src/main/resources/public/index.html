@@ -588,8 +588,8 @@
                   barchart.on('dblclick', (event) => {
                     if (!this.$data.realtime) {
                       this.$data.condition.query = `(${this.$data.condition.query?.trim() || '*:*'}) `
-                        + `AND ${this.$data.axis[this.$data.barchart.yaxis].query(event.name)} `
-                        + `AND ${this.$data.axis[this.$data.barchart.xaxis].query(event.seriesName)}`;
+                        + `AND ${yaxis.query(event.name)} `
+                        + `AND ${xaxis.query(event.seriesName)}`;
                       this.search();
                       this.$data.tab = 'table';
                     }
