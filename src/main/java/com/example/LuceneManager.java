@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -22,6 +23,9 @@ import org.apache.lucene.queryparser.flexible.standard.config.PointsConfig;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.TopDocs;
+import org.apache.lucene.search.grouping.GroupDocs;
+import org.apache.lucene.search.grouping.GroupingSearch;
+import org.apache.lucene.search.grouping.TopGroups;
 import org.apache.lucene.store.FSDirectory;
 
 public class LuceneManager implements Closeable {
@@ -53,7 +57,25 @@ public class LuceneManager implements Closeable {
         public Document get(Integer id) throws IOException {
             StoredFields storedFields = this.searcher.storedFields();
             return storedFields.document(id);
-        } 
+        }
+
+        public <T> Map<T, Long> count(String field, String query, Map<String, PointsConfig> pointsConfig, String groupField) throws IOException, QueryNodeException {
+            GroupingSearch groupingSearch = new GroupingSearch(groupField);
+            StandardQueryParser parser = new StandardQueryParser(this.analyzer);
+            parser.setPointsConfigMap(pointsConfig);
+            Map<T, Long> count = new HashMap<>();
+            int offset = 0;
+            int limit = 1024;
+            while (true) {
+                TopGroups<T> result = groupingSearch.search(this.searcher, parser.parse(query, field), offset, limit);
+                if (result.groups.length == 0) break;
+                offset += limit;
+                for (GroupDocs<T> group: result.groups) {
+                    count.put(group.groupValue(), group.totalHits().value());
+                }
+            }
+            return count;
+        }
 
         @Override
         public void close() throws IOException {

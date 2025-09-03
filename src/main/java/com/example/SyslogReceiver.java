@@ -22,8 +22,10 @@ import java.util.function.Supplier;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.IntField;
-import org.apache.lucene.document.KeywordField;
 import org.apache.lucene.document.LongField;
+import org.apache.lucene.document.SortedDocValuesField;
+import org.apache.lucene.document.SortedNumericDocValuesField;
+import org.apache.lucene.document.StringField;
 import org.apache.lucene.document.TextField;
 import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.queryparser.flexible.core.QueryNodeException;
@@ -33,6 +35,7 @@ import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.SortedNumericSortField;
 import org.apache.lucene.search.TopDocs;
+import org.apache.lucene.util.BytesRef;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.spi.LoggingEventBuilder;
@@ -52,14 +55,14 @@ public class SyslogReceiver implements Runnable {
 
     public static enum LuceneFieldKeys {
         timestamp(LongField.class, long.class, new PointsConfig(new DecimalFormat(), Long.class)),
-        day(KeywordField.class, String.class),
-        time(KeywordField.class, String.class),
-        host(TextField.class, String.class),
-        addr(KeywordField.class, String.class),
+        day(StringField.class, String.class),
+        time(StringField.class, String.class),
+        host(StringField.class, String.class),
+        addr(StringField.class, String.class),
         port(IntField.class, int.class, new PointsConfig(new DecimalFormat(), Integer.class)),
-        facility(KeywordField.class, String.class),
-        severity(KeywordField.class, String.class),
-        format(KeywordField.class, String.class),
+        facility(StringField.class, String.class),
+        severity(StringField.class, String.class),
+        format(StringField.class, String.class),
         message(TextField.class, String.class),
         raw(TextField.class, String.class);
 
@@ -194,8 +197,8 @@ public class SyslogReceiver implements Runnable {
             }
             return doc;
         };
+        Document doc = init.get();
         try {
-            Document doc = init.get();
             Rfc3164 log = SyslogParser.parse(message);
             doc.add(LuceneFieldKeys.facility.field(log.facility.name()));
             doc.add(LuceneFieldKeys.severity.field(log.severity.name()));
@@ -211,7 +214,6 @@ public class SyslogReceiver implements Runnable {
             doc.add(LuceneFieldKeys.format.field(log.format));
             return doc;
         } catch (SyslogParseException e) {
-            Document doc = init.get();
             Integer priority = SyslogParser.parsePriority(message).getKey();
             if (priority != null) {
                 doc.add(LuceneFieldKeys.facility.field(Facility.of(priority).name()));
@@ -223,6 +225,12 @@ public class SyslogReceiver implements Runnable {
             doc.add(LuceneFieldKeys.message.field(message));
             doc.add(LuceneFieldKeys.format.field("unknown"));
             return doc;
+        } finally {
+            doc.add(new SortedNumericDocValuesField(LuceneFieldKeys.timestamp.name(), timestamp.toInstant().toEpochMilli()));
+            doc.add(new SortedNumericDocValuesField(LuceneFieldKeys.port.name(), port));
+            for (LuceneFieldKeys field: Arrays.asList(LuceneFieldKeys.values()).stream().filter(field -> field.fieldClazz == StringField.class).toList()) {
+                doc.add(new SortedDocValuesField(field.name(), new BytesRef(doc.get(field.name()))));
+            }
         }
     }
 

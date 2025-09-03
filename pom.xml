@@ -55,6 +55,12 @@
       <artifactId>lucene-analysis-common</artifactId>
       <version>10.2.2</version>
     </dependency>
+    <!-- https://mvnrepository.com/artifact/org.apache.lucene/lucene-grouping -->
+    <dependency>
+      <groupId>org.apache.lucene</groupId>
+      <artifactId>lucene-grouping</artifactId>
+      <version>10.2.2</version>
+    </dependency>
     <!-- https://mvnrepository.com/artifact/io.javalin/javalin -->
     <dependency>
       <groupId>io.javalin</groupId>

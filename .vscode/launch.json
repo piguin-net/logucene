@@ -6,12 +6,6 @@
     "configurations": [
         {
             "type": "java",
-            "name": "Current File",
-            "request": "launch",
-            "mainClass": "${file}"
-        },
-        {
-            "type": "java",
             "name": "Main",
             "request": "launch",
             "mainClass": "com.example.Main",
@@ -20,7 +14,7 @@
         },
         {
             "type": "java",
-            "name": "SyslogReceiver",
+            "name": "Migration",
             "request": "launch",
             "mainClass": "com.example.SyslogReceiver",
             "projectName": "logucene"

@@ -18,10 +18,8 @@ import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.zip.GZIPOutputStream;
@@ -41,6 +39,7 @@ import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.SortedNumericSortField;
 import org.apache.lucene.search.TopDocs;
+import org.apache.lucene.util.BytesRef;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -73,8 +72,6 @@ public class Main
     private static String script = Settings.getSyslogListener();
     private static ScriptEngineManager manager = new ScriptEngineManager();
     private static ScriptEngine engine = manager.getEngineByName("groovy");
-    // TODO: indexからユニークな値を取得できないか
-    private static Set<String> hosts = new HashSet<>();
 
     public static class SearchResult {
         public String query;
@@ -117,9 +114,6 @@ public class Main
                     }
                 }
             });
-            watcher.addEventListener(doc -> {
-                hosts.add(doc.get(LuceneFieldKeys.host.name()));
-            });
             worker = new Thread(watcher);
             worker.start();
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -137,12 +131,6 @@ public class Main
 
     public static void main(String[] args) throws IOException, ParseException, QueryNodeException {
         Settings.print();
-        try (LuceneReader reader = lucene.getReader();) {
-            for (int id: search("*:*").ids) {
-                Document doc = reader.get(id);
-                hosts.add(doc.get(LuceneFieldKeys.host.name()));
-            }
-        }
         // TODO: 認証(https://javalin.io/tutorials/auth-example)
         Javalin server = Javalin.create(config -> {
             config.staticFiles.enableWebjars();
@@ -237,7 +225,17 @@ public class Main
             this.put("settings", Settings.get());
             this.put("facility", Arrays.asList(Facility.values()).stream().map(item -> item.name()).toList());
             this.put("severity", Arrays.asList(Severity.values()).stream().map(item -> item.name()).toList());
-            this.put("host", hosts);
+            this.put("host", new ArrayList<>() {{
+                try (LuceneReader reader = lucene.getReader();) {
+                    Map<BytesRef, Long> count = reader.count(
+                        LuceneFieldKeys.message.name(),
+                        "*:*",
+                        LuceneFieldKeys.getPointsConfig(),
+                        LuceneFieldKeys.host.name()
+                    );
+                    this.addAll(count.keySet().stream().map(key -> key.utf8ToString()).toList());
+                }
+            }});
         }};
         ctx.json(result);
     }
@@ -299,17 +297,19 @@ public class Main
     }
 
     private static void count(Context ctx) throws ParseException, IOException, QueryNodeException {
-        // TODO: group by 的なことができないか https://stackoverflow.com/questions/20044786/how-to-get-the-unique-results-from-lucene-index
         try (LuceneReader reader = lucene.getReader();) {
-            SearchResult hits = search(ctx.queryParam("query"));
             String field = ctx.queryParam("field");
-            Map<String, Long> count = new HashMap<>();
-            for (int id: hits.ids) {
-                Document doc = reader.get(id);
-                String key = doc.get(field);
-                if (!count.containsKey(key)) count.put(key, 0l);
-                count.put(key, count.get(key) + 1);
-            }
+            Map<BytesRef, Long> result = reader.count(
+                LuceneFieldKeys.message.name(),
+                ctx.queryParam("query"),
+                LuceneFieldKeys.getPointsConfig(),
+                field
+            );
+            Map<String, Long> count = new HashMap<>() {{
+                for (Entry<BytesRef, Long> entry: result.entrySet()) {
+                    this.put(entry.getKey().utf8ToString(), entry.getValue());
+                }
+            }};
             ctx.json(count);
         } catch (IndexNotFoundException e) {
             logger.atWarn().log("index not found.");
