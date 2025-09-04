@@ -52,6 +52,16 @@ sudo podman run -it -d \
   -p 8080:8080 \
   logucene
 ```
+データ移行
+```
+podman run --rm \
+  -v $PWD:/workdir \
+  --workdir /workdir \
+  openjdk:21 \
+  java -cp target/logucene-1.2-SNAPSHOT-jar-with-dependencies.jar com.example.SyslogReceiver
+rm -rf index
+mv migrated index
+```
 
 # オプション
 ```
