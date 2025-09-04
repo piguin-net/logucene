@@ -260,19 +260,20 @@
             },
             axis: {
               'day': {
-                query: value => `day:["${value}" TO "${value}"]`,
+                query: value => `day:"${value}"`,
                 format: log => log.day,
-                align: data => [...new Set(data.map(row => row.day))].sort()
+                align: data => [...new Set(data)].sort()
               },
-              'time': {
-                query: value => `time:["${value}:00:00" TO "${value}:59:59"]`,
-                format: log => log.time.slice(0, 2),
-                align: data => [...Array(24)].map((_, i) => ('0' + i).slice(-2))
-              },
+              // TODO: TextFieldだと範囲指定ができない
+              // 'time': {
+              //   query: value => `time:["${value}:00:00" TO "${value}:59:59"]`,
+              //   format: log => log.time.slice(0, 2),
+              //   align: data => [...Array(24)].map((_, i) => ('0' + i).slice(-2))
+              // },
               'host': {
                 query: value => `host:"${value}"`,
                 format: log => log.host,
-                align: data => [...new Set(data.map(row => row.host))].sort()
+                align: data => [...new Set(data)].sort()
               },
               'format': {
                 query: value => `format:"${value}"`,
@@ -282,18 +283,18 @@
               'addr': {
                 query: value => `addr:"${value}"`,
                 format: log => log.addr,
-                align: data => [...new Set(data.map(row => row.addr))].sort()
+                align: data => [...new Set(data)].sort()
               },
               // TODO: 数値はcount未対応
               // 'port': {
               //   query: value => `port:${value}`,
               //   format: log => log.port,
-              //   align: data => [...new Set(data.map(row => row.port))].sort()
+              //   align: data => [...new Set(data)].sort()
               // },
               'facility': {
                 query: value => `facility:"${value}"`,
                 format: log => log.facility,
-                align: data => this.$data.config.facility
+                align: data => [...new Set(data)].sort()
               },
               'severity': {
                 query: value => `severity:"${value}"`,
@@ -442,7 +443,7 @@
               var y = this.$data.condition.day.getFullYear();
               var m = ('0' + (this.$data.condition.day.getMonth() + 1)).slice(-2);
               var d = ('0' + this.$data.condition.day.getDate()).slice(-2);
-              query = `${query} AND day:["${y}-${m}-${d}" TO "${y}-${m}-${d}"]`;
+              query = `${query} AND day:"${y}-${m}-${d}"`;
             }
             if (this.$data.condition.host.length > 0) {
               query = `${query} AND (${this.$data.condition.host.map(x => `host:"${x}"`).join(' OR ')})`;
@@ -575,14 +576,57 @@
           },
           showChart: function() {
             if (this.$data.tab == 'barchart') {
+              var query = encodeURIComponent(this.getQuery());
+              var yaxis = this.$data.axis[this.$data.barchart.yaxis];
+              var xaxis = this.$data.axis[this.$data.barchart.xaxis];
               var promise = (this.$data.realtime
-                ? Promise.resolve({data: {docs: this.$data.table.logs}})
-                : this.$data.http.get(`/api/documents?query=${encodeURIComponent(this.getQuery())}&fields=${this.$data.barchart.yaxis},${this.$data.barchart.xaxis}`)
+                ? Promise.resolve().then(() => {
+                    var result = {
+                      yaxis: yaxis.align(this.$data.table.logs.map(row => row[this.$data.barchart.yaxis])),
+                      xaxis: xaxis.align(this.$data.table.logs.map(row => row[this.$data.barchart.xaxis])),
+                      count: {}
+                    };
+                    for (var y of result.yaxis) {
+                      result.count[y] = {};
+                      for (var x of result.xaxis) {
+                        result.count[y][x] = 0;
+                      }
+                    }
+                    for (var log of this.$data.table.logs) {
+                      result.count[yaxis.format(log)][xaxis.format(log)]++;
+                    }
+                    return result;
+                  })
+                : Promise.all([
+                    this.$data.http.get(`/api/count?query=${query}&field=${this.$data.barchart.yaxis}`),
+                    this.$data.http.get(`/api/count?query=${query}&field=${this.$data.barchart.xaxis}`),
+                  ]).then(([y, x]) => {
+                    var result = {
+                      yaxis: yaxis.align(Object.keys(y.data)),
+                      xaxis: xaxis.align(Object.keys(x.data)),
+                      count: {}
+                    };
+                    for (var y of result.yaxis) {
+                      result.count[y] = {};
+                      for (var x of result.xaxis) {
+                        result.count[y][x] = 0;
+                      }
+                    }
+                    return new Promise((resolve, reject) => {
+                      Promise.all(result.yaxis.map(y => {
+                        return this.$data.http.get(`/api/count?query=${query} AND ${yaxis.query(y)}&field=${this.$data.barchart.xaxis}`).then(x => {
+                          for (var [key, value] of Object.entries(x.data)) {
+                            result.count[y][key] = value;
+                          }
+                        });
+                      })).then(() => {
+                        resolve(result);
+                      });
+                    });
+                  })
               );
               return promise.then(response => {
                 var barchart = this.$data.barchart.instance || echarts.init(this.$refs.barchart);
-                var yaxis = this.$data.axis[this.$data.barchart.yaxis];
-                var xaxis = this.$data.axis[this.$data.barchart.xaxis];
                 if (!this.$data.barchart.instance) {
                   this.$data.barchart.instance = barchart;
                   barchart.on('dblclick', (event) => {
@@ -594,16 +638,6 @@
                       this.$data.tab = 'table';
                     }
                   });
-                }
-                var count = {};
-                for (var y of yaxis.align(response.data.docs)) {
-                  count[y] = {};
-                  for (var x of xaxis.align(response.data.docs)) {
-                    count[y][x] = 0;
-                  }
-                }
-                for (var log of response.data.docs) {
-                  count[yaxis.format(log)][xaxis.format(log)]++;
                 }
                 var option = {
                   tooltip: {
@@ -618,9 +652,9 @@
                   },
                   yAxis: {
                     type: 'category',
-                    data: yaxis.align(response.data.docs)
+                    data: response.yaxis
                   },
-                  series: xaxis.align(response.data.docs).map(x => {
+                  series: response.xaxis.map(x => {
                     return  {
                       name: x,
                       type: 'bar',
@@ -631,7 +665,7 @@
                       emphasis: {
                         focus: 'series'
                       },
-                      data: yaxis.align(response.data.docs).map(y => count[y][x])
+                      data: response.yaxis.map(y => response.count[y][x])
                     };
                   })
                 };

@@ -25,7 +25,6 @@ import org.apache.lucene.document.IntField;
 import org.apache.lucene.document.LongField;
 import org.apache.lucene.document.SortedDocValuesField;
 import org.apache.lucene.document.SortedNumericDocValuesField;
-import org.apache.lucene.document.StringField;
 import org.apache.lucene.document.TextField;
 import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.queryparser.flexible.core.QueryNodeException;
@@ -53,16 +52,17 @@ public class SyslogReceiver implements Runnable {
 
     private Logger logger = LoggerFactory.getLogger(this.getClass());
 
+    // TODO: TextFieldではなくStringFieldかKeywordFieldを使いたい
     public static enum LuceneFieldKeys {
         timestamp(LongField.class, long.class, new PointsConfig(new DecimalFormat(), Long.class)),
-        day(StringField.class, String.class),
-        time(StringField.class, String.class),
-        host(StringField.class, String.class),
-        addr(StringField.class, String.class),
+        day(TextField.class, String.class),
+        time(TextField.class, String.class),
+        host(TextField.class, String.class),
+        addr(TextField.class, String.class),
         port(IntField.class, int.class, new PointsConfig(new DecimalFormat(), Integer.class)),
-        facility(StringField.class, String.class),
-        severity(StringField.class, String.class),
-        format(StringField.class, String.class),
+        facility(TextField.class, String.class),
+        severity(TextField.class, String.class),
+        format(TextField.class, String.class),
         message(TextField.class, String.class),
         raw(TextField.class, String.class);
 
@@ -228,7 +228,7 @@ public class SyslogReceiver implements Runnable {
         } finally {
             doc.add(new SortedNumericDocValuesField(LuceneFieldKeys.timestamp.name(), timestamp.toInstant().toEpochMilli()));
             doc.add(new SortedNumericDocValuesField(LuceneFieldKeys.port.name(), port));
-            for (LuceneFieldKeys field: Arrays.asList(LuceneFieldKeys.values()).stream().filter(field -> field.fieldClazz == StringField.class).toList()) {
+            for (LuceneFieldKeys field: Arrays.asList(LuceneFieldKeys.values()).stream().filter(field -> field.fieldClazz == TextField.class).toList()) {
                 doc.add(new SortedDocValuesField(field.name(), new BytesRef(doc.get(field.name()))));
             }
         }
