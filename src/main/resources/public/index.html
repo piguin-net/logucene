@@ -660,7 +660,10 @@
                       type: 'bar',
                       stack: 'total',
                       label: {
-                        show: true
+                        show: true,
+                        formatter: params => {
+                          return params.value > 0 ? params.value.toLocaleString() : '';
+                        }
                       },
                       emphasis: {
                         focus: 'series'
