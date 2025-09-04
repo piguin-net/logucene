@@ -84,8 +84,8 @@
             </div>
             <div style="display: flex; width: calc(100% - 100px);">
               <IftaLabel>
-                <DatePicker ref="datePicker" v-model="condition.day" inputId="day" :disabled="realtime" dateFormat="yy-mm-dd" showIcon @update:modelValue="dateSelect" :inputStyle="{'width': '110px'}" />
-                <label for="day">Day</label>
+                <DatePicker ref="datePicker" v-model="condition.date" inputId="date" :disabled="realtime" dateFormat="yy-mm-dd" showIcon @update:modelValue="dateSelect" :inputStyle="{'width': '110px'}" />
+                <label for="date">Day</label>
               </IftaLabel>
               <IftaLabel>
                 <MultiSelect v-model="condition.host" inputId="host" :disabled="realtime" :options="config.host" style="width: 150px;" filter :maxSelectedLabels="1" @update:modelValue="search" />
@@ -229,7 +229,7 @@
               severity: [],
             },
             condition: {
-              day: null,
+              date: null,
               host: [],
               facility: [],
               severity: [],
@@ -238,7 +238,7 @@
             },
             table: {
               fields: [[
-                {name: 'day'},
+                {name: 'date'},
                 {name: 'time'},
                 {name: 'host'},
                 {name: 'facility'},
@@ -259,9 +259,9 @@
               selected: null
             },
             axis: {
-              'day': {
-                query: value => `day:"${value}"`,
-                format: log => log.day,
+              'date': {
+                query: value => `date:"${value}"`,
+                format: log => log.date,
                 align: data => [...new Set(data)].sort()
               },
               // TODO: TextFieldだと範囲指定ができない
@@ -315,7 +315,7 @@
                 'severity',
                 'host',
               ],[
-                'day',
+                'date',
                 'time',
                 'format',
                 'addr',
@@ -424,7 +424,7 @@
             });
           },
           clearFilter: function() {
-            this.$data.condition.day = null;
+            this.$data.condition.date = null;
             this.$data.condition.host = [];
             this.$data.condition.facility = [];
             this.$data.condition.severity = [];
@@ -439,11 +439,11 @@
           getQuery: function(node, query) {
             query = `(${query || this.$data.condition.query?.trim() || '*:*'})`;
             node = node || this.$data.tree.selected;
-            if (this.$data.condition.day != null) {
-              var y = this.$data.condition.day.getFullYear();
-              var m = ('0' + (this.$data.condition.day.getMonth() + 1)).slice(-2);
-              var d = ('0' + this.$data.condition.day.getDate()).slice(-2);
-              query = `${query} AND day:"${y}-${m}-${d}"`;
+            if (this.$data.condition.date != null) {
+              var y = this.$data.condition.date.getFullYear();
+              var m = ('0' + (this.$data.condition.date.getMonth() + 1)).slice(-2);
+              var d = ('0' + this.$data.condition.date.getDate()).slice(-2);
+              query = `${query} AND date:"${y}-${m}-${d}"`;
             }
             if (this.$data.condition.host.length > 0) {
               query = `${query} AND (${this.$data.condition.host.map(x => `host:"${x}"`).join(' OR ')})`;

@@ -55,7 +55,7 @@ public class SyslogReceiver implements Runnable {
     // TODO: TextFieldではなくStringFieldかKeywordFieldを使いたい
     public static enum LuceneFieldKeys {
         timestamp(LongField.class, long.class, new PointsConfig(new DecimalFormat(), Long.class)),
-        day(TextField.class, String.class),
+        date(TextField.class, String.class),
         time(TextField.class, String.class),
         host(TextField.class, String.class),
         addr(TextField.class, String.class),
@@ -209,7 +209,7 @@ public class SyslogReceiver implements Runnable {
                 : ZoneId.of(Settings.getSyslogTimezone(addr));
             ZonedDateTime date = log.date.atZone(syslogTimezone);
             date = date.withZoneSameInstant(userTimezone);
-            doc.add(LuceneFieldKeys.day.field(date.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))));
+            doc.add(LuceneFieldKeys.date.field(date.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))));
             doc.add(LuceneFieldKeys.time.field(date.format(DateTimeFormatter.ofPattern("HH:mm:ss"))));
             doc.add(LuceneFieldKeys.format.field(log.format));
             return doc;
@@ -220,7 +220,7 @@ public class SyslogReceiver implements Runnable {
                 doc.add(LuceneFieldKeys.severity.field(Severity.of(priority).name()));
             }
             doc.add(LuceneFieldKeys.host.field(addr));
-            doc.add(LuceneFieldKeys.day.field(timestamp.withZoneSameInstant(userTimezone).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))));
+            doc.add(LuceneFieldKeys.date.field(timestamp.withZoneSameInstant(userTimezone).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))));
             doc.add(LuceneFieldKeys.time.field(timestamp.withZoneSameInstant(userTimezone).format(DateTimeFormatter.ofPattern("HH:mm:ss"))));
             doc.add(LuceneFieldKeys.message.field(message));
             doc.add(LuceneFieldKeys.format.field("unknown"));
