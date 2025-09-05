@@ -172,10 +172,10 @@ public class SyslogParser {
         Rfc3164 data       = new Rfc3164(priority.getKey());
         String year        = "" + LocalDateTime.now().getYear();
         String month       = mmm.get(parts.get(i++).toLowerCase());
-        String date        = parts.get(i++);
+        String day         = parts.get(i++);
         String time        = parts.get(i++);
-        String datetime    = String.format("%s %s %s %s", year, month, ("0" + date).substring(date.length() - 1), time);
-        data.date          = LocalDateTime.parse(datetime, DateTimeFormatter.ofPattern("yyyy MM dd HH:mm:ss"));
+        String date        = String.format("%s %s %s %s", year, month, ("0" + day).substring(day.length() - 1), time);
+        data.date          = LocalDateTime.parse(date, DateTimeFormatter.ofPattern("yyyy MM dd HH:mm:ss"));
         data.host          = parts.get(i++);
         while (i < parts.size()) {
             if (data.message == null) {
