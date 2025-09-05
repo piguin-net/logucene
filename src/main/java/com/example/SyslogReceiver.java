@@ -5,6 +5,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.SocketException;
+import java.nio.ByteBuffer;
 import java.text.DecimalFormat;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
@@ -21,10 +22,10 @@ import java.util.function.Supplier;
 
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
-import org.apache.lucene.document.IntField;
-import org.apache.lucene.document.LongField;
+import org.apache.lucene.document.IntPoint;
+import org.apache.lucene.document.LongPoint;
 import org.apache.lucene.document.SortedDocValuesField;
-import org.apache.lucene.document.SortedNumericDocValuesField;
+import org.apache.lucene.document.StoredField;
 import org.apache.lucene.document.TextField;
 import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.queryparser.flexible.core.QueryNodeException;
@@ -54,12 +55,12 @@ public class SyslogReceiver implements Runnable {
 
     // TODO: TextFieldではなくStringFieldかKeywordFieldを使いたい
     public static enum LuceneFieldKeys {
-        timestamp(LongField.class, long.class, new PointsConfig(new DecimalFormat(), Long.class)),
+        timestamp(LongPoint.class, long.class, new PointsConfig(new DecimalFormat(), Long.class)),
         date(TextField.class, String.class),
         time(TextField.class, String.class),
         host(TextField.class, String.class),
         addr(TextField.class, String.class),
-        port(IntField.class, int.class, new PointsConfig(new DecimalFormat(), Integer.class)),
+        port(IntPoint.class, int.class, new PointsConfig(new DecimalFormat(), Integer.class)),
         facility(TextField.class, String.class),
         severity(TextField.class, String.class),
         format(TextField.class, String.class),
@@ -81,15 +82,25 @@ public class SyslogReceiver implements Runnable {
         }
 
         public <T> Field field(T value) throws InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException {
-            return this.fieldClazz.getDeclaredConstructor(
-                String.class,
-                this.valueClazz,
-                Field.Store.class
-            ).newInstance(
-                this.name(),
-                value,
-                Field.Store.YES
-            );
+            if (Arrays.asList(IntPoint.class, LongPoint.class).contains(this.fieldClazz)) {
+                return this.fieldClazz.getDeclaredConstructor(
+                    String.class,
+                    this.valueClazz
+                ).newInstance(
+                    this.name(),
+                    value
+                );
+            } else {
+                return this.fieldClazz.getDeclaredConstructor(
+                    String.class,
+                    this.valueClazz,
+                    Field.Store.class
+                ).newInstance(
+                    this.name(),
+                    value,
+                    Field.Store.YES
+                );
+            }
         }
 
         public static Map<String, PointsConfig> getPointsConfig() {
@@ -226,8 +237,11 @@ public class SyslogReceiver implements Runnable {
             doc.add(LuceneFieldKeys.format.field("unknown"));
             return doc;
         } finally {
-            doc.add(new SortedNumericDocValuesField(LuceneFieldKeys.timestamp.name(), timestamp.toInstant().toEpochMilli()));
-            doc.add(new SortedNumericDocValuesField(LuceneFieldKeys.port.name(), port));
+            // TODO: 処理を共通化
+            doc.add(new StoredField(LuceneFieldKeys.timestamp.name(), timestamp.toInstant().toEpochMilli()));
+            doc.add(new SortedDocValuesField(LuceneFieldKeys.timestamp.name(), new BytesRef(ByteBuffer.allocate(8).putLong(timestamp.toInstant().toEpochMilli()).array())));
+            doc.add(new StoredField(LuceneFieldKeys.port.name(), port));
+            doc.add(new SortedDocValuesField(LuceneFieldKeys.port.name(), new BytesRef(ByteBuffer.allocate(4).putInt(port).array())));
             for (LuceneFieldKeys field: Arrays.asList(LuceneFieldKeys.values()).stream().filter(field -> field.fieldClazz == TextField.class).toList()) {
                 doc.add(new SortedDocValuesField(field.name(), new BytesRef(doc.get(field.name()))));
             }
