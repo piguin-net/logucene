@@ -69,8 +69,8 @@ java \
   -Dsyslog.port=2514 \
   -Dweb.port=8080 \
   -Dlucene.index=index \
-  -Dlucene.analyzer=org.apache.lucene.analysis.standard.StandardAnalyzer \
-  -Dsqlite.analyzer=org.apache.lucene.analysis.standard.StandardAnalyzer \
+  -Dlucene.analyzer=org.apache.lucene.analysis.cjk.CJKAnalyzer \
+  -Dsqlite.analyzer=org.apache.lucene.analysis.cjk.CJKAnalyzer \
   -Dsystem.timezone=Asia/Tokyo \
   -Dsyslog.timezone=Asia/Tokyo \
   -Dsyslog.timezone[127.0.0.1]=Asia/Tokyo \
@@ -82,8 +82,8 @@ java \
 | syslog.port                       | SYSLOG_PORT                          | syslogの受信ポート(UDP)                                                           | 2514                                                 |
 | web.port                          | WEB_PORT                             | webサーバの待受ポート                                                             | 8080                                                 |
 | lucene.index                      | LUCENE_INDEX                         | luceneの保存先ディレクトリ                                                        | index                                                |
-| lucene.analyzer                   | LUCENE_ANALYZER                      | luceneの全文検索に使用するアナライザ                                              | org.apache.lucene.analysis.standard.StandardAnalyzer |
-| sqlite.analyzer                   | SQLITE_ANALYZER                      | SQLiteファイルダウンロード時に使用するアナライザ(トークナイザ)                    | org.apache.lucene.analysis.standard.StandardAnalyzer |
+| lucene.analyzer                   | LUCENE_ANALYZER                      | luceneの全文検索に使用するアナライザ                                              | org.apache.lucene.analysis.cjk.CJKAnalyzer |
+| sqlite.analyzer                   | SQLITE_ANALYZER                      | SQLiteファイルダウンロード時に使用するアナライザ(トークナイザ)                    | org.apache.lucene.analysis.cjk.CJKAnalyzer |
 | system.timezone                   | SYSTEM_TIMEZONE                      | ブラウザで日時を表示する際に使用するタイムゾーン                                  | System.getProperty("user.timezone")                  |
 | syslog.timezone                   | SYSLOG_TIMEZONE                      | RFC3164フォーマットのログに含まれる日時をパースする際に使用するタイムゾーン(共通) | system.timezoneの値                                  |
 | syslog.timezone[送信元IPアドレス] | SYSLOG_TIMEZONE_送信元IPアドレス(※) | RFC3164フォーマットのログに含まれる日時をパースする際に使用するタイムゾーン(個別) | syslog.timezoneの値                                  |

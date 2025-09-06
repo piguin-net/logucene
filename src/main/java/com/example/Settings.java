@@ -42,7 +42,7 @@ public class Settings {
             "lucene.analyzer",
             System.getenv().containsKey("LUCENE_ANALYZER")
                 ? System.getenv("LUCENE_ANALYZER")
-                : "org.apache.lucene.analysis.standard.StandardAnalyzer"
+                : "org.apache.lucene.analysis.cjk.CJKAnalyzer"
         );
     }
 
@@ -51,7 +51,7 @@ public class Settings {
             "sqlite.analyzer",
             System.getenv().containsKey("SQLITE_ANALYZER")
                 ? System.getenv("SQLITE_ANALYZER")
-                : "org.apache.lucene.analysis.standard.StandardAnalyzer"
+                : "org.apache.lucene.analysis.cjk.CJKAnalyzer"
         );
     }
 
