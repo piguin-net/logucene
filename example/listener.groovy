@@ -2,8 +2,6 @@
  * 特定のログをDiscordへ通知するサンプル
  * ログの内容は以下から取得可能です
  *   doc.timestamp
- *   doc.day
- *   doc.time
  *   doc.host
  *   doc.addr
  *   doc.port
