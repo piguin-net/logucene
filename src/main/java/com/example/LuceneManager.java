@@ -5,11 +5,16 @@ import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import org.apache.lucene.analysis.Analyzer;
+import org.apache.lucene.analysis.Analyzer.ReuseStrategy;
+import org.apache.lucene.analysis.Analyzer.TokenStreamComponents;
+import org.apache.lucene.analysis.AnalyzerWrapper;
+import org.apache.lucene.analysis.core.WhitespaceAnalyzer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexWriter;
@@ -32,11 +37,13 @@ public class LuceneManager implements Closeable {
 
     private FSDirectory dir;
     private IndexWriter writer;
-    private Analyzer analyzer;
+    private Analyzer writerAnalyzer;
+    private Analyzer readerAnalyzer;
 
     // TODO: 全てのデータを1つのindexディレクトリに保存するなら古いデータの削除機能が欲しい、月毎などで分けたほうがいい？
     public static class LuceneReader implements Closeable {
 
+        private static Object analyzerLock = new Object();
         private final DirectoryReader reader;
         private final IndexSearcher searcher;
         private final Analyzer analyzer;
@@ -51,7 +58,9 @@ public class LuceneManager implements Closeable {
         public TopDocs search(String field, String query, Sort order, Map<String, PointsConfig> pointsConfig) throws ParseException, IOException, QueryNodeException {
             StandardQueryParser parser = new StandardQueryParser(this.analyzer);
             parser.setPointsConfigMap(pointsConfig);
-            return this.searcher.search(parser.parse(query, field), Integer.MAX_VALUE, order);
+            synchronized (analyzerLock) {
+                return this.searcher.search(parser.parse(query, field), Integer.MAX_VALUE, order);
+            }
         }
 
         public Document get(Integer id) throws IOException {
@@ -67,11 +76,18 @@ public class LuceneManager implements Closeable {
             int offset = 0;
             int limit = 1024;
             while (true) {
-                TopGroups<T> result = groupingSearch.search(this.searcher, parser.parse(query, field), offset, limit);
-                if (result.groups.length == 0) break;
-                offset += limit;
-                for (GroupDocs<T> group: result.groups) {
-                    count.put(group.groupValue(), group.totalHits().value());
+                synchronized (analyzerLock) {
+                    TopGroups<T> result = groupingSearch.search(
+                        this.searcher,
+                        parser.parse(query, field),
+                        offset,
+                        limit
+                    );
+                    if (result.groups.length == 0) break;
+                    offset += limit;
+                    for (GroupDocs<T> group: result.groups) {
+                        count.put(group.groupValue(), group.totalHits().value());
+                    }
                 }
             }
             return count;
@@ -85,12 +101,37 @@ public class LuceneManager implements Closeable {
     }
 
     public LuceneManager(String path) throws IOException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException, ClassNotFoundException {
+        this(path, new ArrayList<>());
+    }
+
+    public LuceneManager(String path, List<String> tokenizeFields) throws IOException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException, ClassNotFoundException {
         this.dir = FSDirectory.open(Paths.get(path));
 
         String clazz = Settings.getLuceneAnalyzer();
-        this.analyzer = (Analyzer) Class.forName(clazz).getDeclaredConstructor().newInstance();
+        this.writerAnalyzer = (Analyzer) Class.forName(clazz).getDeclaredConstructor().newInstance();
+        this.readerAnalyzer = new AnalyzerWrapper(new ReuseStrategy() {
+            private Map<String, TokenStreamComponents> cache = new HashMap<>();
+            @Override
+            public TokenStreamComponents getReusableComponents(Analyzer analyzer, String fieldName) {
+                return this.cache.containsKey(fieldName) ? this.cache.get(fieldName) : null;
+            }
+            @Override
+            public void setReusableComponents(Analyzer analyzer, String fieldName, TokenStreamComponents components) {
+                this.cache.put(fieldName, components);
+            }
+        }) {
+            @Override
+            protected Analyzer getWrappedAnalyzer(String fieldName) {
+                if (tokenizeFields.contains(fieldName)) {
+                    return writerAnalyzer;
+                } else {
+                    // TODO: 設定で指定可能にする
+                    return new WhitespaceAnalyzer();
+                }
+            }
+        };
 
-        IndexWriterConfig iwc = new IndexWriterConfig(this.analyzer);
+        IndexWriterConfig iwc = new IndexWriterConfig(this.writerAnalyzer);
         iwc.setOpenMode(OpenMode.CREATE_OR_APPEND);
         this.writer = new IndexWriter(dir, iwc);
     }
@@ -108,7 +149,7 @@ public class LuceneManager implements Closeable {
     }
 
     public LuceneReader getReader() throws IOException {
-        return new LuceneReader(dir.getDirectory().toAbsolutePath().toString(), this.analyzer);
+        return new LuceneReader(dir.getDirectory().toAbsolutePath().toString(), this.readerAnalyzer);
     }
 
     public Path getDirectory() {
