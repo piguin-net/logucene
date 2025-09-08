@@ -14,14 +14,17 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.time.ZonedDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
 import javax.script.ScriptEngine;
@@ -31,6 +34,8 @@ import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.tokenattributes.OffsetAttribute;
 import org.apache.lucene.document.Document;
+import org.apache.lucene.document.KeywordField;
+import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.IndexNotFoundException;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.queryparser.classic.ParseException;
@@ -54,6 +59,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
 import io.javalin.http.HttpStatus;
+import io.javalin.http.UploadedFile;
 import io.javalin.http.staticfiles.Location;
 import io.javalin.websocket.WsConnectContext;
 
@@ -82,7 +88,19 @@ public class Main
 
     static {
         try {
-            lucene = new LuceneManager(Settings.getLuceneIndex());
+            lucene = new LuceneManager(
+                Settings.getLuceneIndex(),
+                Arrays.asList(LuceneFieldKeys.values()).stream().filter(field -> {
+                    return Arrays.asList(
+                        TextField.class,
+                        KeywordField.class
+                    ).contains(
+                        field.getFieldClass()
+                    );
+                }).map(
+                    field -> field.name()
+                ).toList()
+            );
             watcher = new SyslogReceiver(Settings.getSyslogPort(), lucene);
             watcher.addEventListener(doc -> {
                 try {
@@ -129,6 +147,11 @@ public class Main
         }
     }
 
+    private static ZoneOffset getZoneOffset(Context ctx) {
+        int offset = Integer.valueOf(ctx.header("X-Tz-Offset")) * -1;
+        return ZoneOffset.ofHoursMinutes(offset / 60, offset % 60);
+    }
+
     public static void main(String[] args) throws IOException, ParseException, QueryNodeException {
         Settings.print();
         // TODO: 認証(https://javalin.io/tutorials/auth-example)
@@ -140,7 +163,7 @@ public class Main
                 staticFiles.location = Location.valueOf(System.getProperty("web.location", "CLASSPATH"));
             });
         }).get(
-            "/api/search", ctx -> ctx.json(search(ctx.queryParam("query")))
+            "/api/search", ctx -> ctx.json(search(ctx.queryParam("query"), getZoneOffset(ctx)))
         ).get(
             "/api/config", Main::config
         ).get(
@@ -150,12 +173,14 @@ public class Main
         ).get(
             "/api/export/sqlite", Main::sqlite
         ).get(
-            "/api/export/tsv", Main::tsv
+            "/api/export/tsv", Main::exportTsv
+        ).post(
+            "/api/import/tsv", Main::importTsv
         ).before(
-            ctx -> ctx.attribute("start", ZonedDateTime.now().toInstant().toEpochMilli())
+            ctx -> ctx.attribute("start", new Date().getTime())
         ).after(
             ctx -> logger.atInfo().log("{} {}:{} {}",
-                ZonedDateTime.now().toInstant().toEpochMilli() - ((long)ctx.attribute("start")),
+                new Date().getTime() - ((long)ctx.attribute("start")),
                 ctx.req().getRemoteAddr(),
                 ctx.req().getRemotePort(),
                 ctx.fullUrl()
@@ -188,8 +213,8 @@ public class Main
         }};
     }
 
-    private static SearchResult search(String query) throws ParseException, IOException, QueryNodeException {
-        long start = ZonedDateTime.now().toInstant().toEpochMilli();
+    private static SearchResult search(String query, ZoneOffset offset) throws ParseException, IOException, QueryNodeException {
+        long start = new Date().getTime();
         SearchResult result = new SearchResult();
         result.query = query;
         try (LuceneReader reader = lucene.getReader();) {
@@ -197,11 +222,11 @@ public class Main
                 LuceneFieldKeys.message.name(),
                 result.query,
                 new Sort(new SortedNumericSortField(
-                    LuceneFieldKeys.timestamp.name(),
+                    LuceneFieldKeys.order.name(),
                     SortField.Type.LONG,
                     true
                 )),
-                LuceneFieldKeys.getPointsConfig()
+                LuceneFieldKeys.getPointsConfig(offset)
             );
             result.total = hits.totalHits.value();
             result.ids = Arrays.asList(
@@ -211,7 +236,7 @@ public class Main
             ).collect(
                 Collectors.toList()
             );
-            long end = ZonedDateTime.now().toInstant().toEpochMilli();
+            long end = new Date().getTime();
             result.ms = end - start;
             return result;
         } catch (IndexNotFoundException e) {
@@ -230,7 +255,7 @@ public class Main
                     Map<BytesRef, Long> count = reader.count(
                         LuceneFieldKeys.message.name(),
                         "*:*",
-                        LuceneFieldKeys.getPointsConfig(),
+                        LuceneFieldKeys.getPointsConfig(getZoneOffset(ctx)),
                         LuceneFieldKeys.host.name()
                     );
                     this.addAll(count.keySet().stream().map(key -> key.utf8ToString()).toList());
@@ -242,7 +267,7 @@ public class Main
 
     private static void documents(Context ctx) throws ParseException, IOException, QueryNodeException {
         try {
-            SearchResult hits = search(ctx.queryParam("query"));
+            SearchResult hits = search(ctx.queryParam("query"), getZoneOffset(ctx));
             Integer first = ctx.queryParam("first") != null ? Integer.valueOf(ctx.queryParam("first")) : 0;
             Integer last = ctx.queryParam("last") != null ? Integer.valueOf(ctx.queryParam("last")) : hits.ids.size();
             List<String> fields = ctx.queryParam("fields") != null
@@ -267,11 +292,11 @@ public class Main
                     json.writeStartArray();
                     try (LuceneReader reader = lucene.getReader();) {
                         for (int id: ids) {
-                            Document doc = reader.get(id);
+                            Map<String, String> doc = SyslogReceiver.toMap(reader.get(id), getZoneOffset(ctx));
                             json.writeStartObject();
                             json.writeNumberField("id", id);
-                            for (String field: fields) {
-                                json.writeStringField(field, doc.get(field));
+                            for (Entry<String, String> entry: doc.entrySet()) {
+                                json.writeStringField(entry.getKey(), entry.getValue());
                             }
                             json.writeEndObject();
                             json.flush();
@@ -302,7 +327,7 @@ public class Main
             Map<BytesRef, Long> result = reader.count(
                 LuceneFieldKeys.message.name(),
                 ctx.queryParam("query"),
-                LuceneFieldKeys.getPointsConfig(),
+                LuceneFieldKeys.getPointsConfig(getZoneOffset(ctx)),
                 field
             );
             Map<String, Long> count = new HashMap<>() {{
@@ -316,8 +341,8 @@ public class Main
         }
     }
 
-    private static void tsv(Context ctx) throws IOException, ClassNotFoundException, SQLException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException, ParseException, QueryNodeException {
-        SearchResult hits = search(ctx.queryParam("query"));
+    private static void exportTsv(Context ctx) throws IOException, ClassNotFoundException, SQLException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException, ParseException, QueryNodeException {
+        SearchResult hits = search(ctx.queryParam("query"), getZoneOffset(ctx));
         PipedInputStream pin = new PipedInputStream();
         new Thread(() -> {
             try (
@@ -334,15 +359,17 @@ public class Main
                     Collectors.joining("\t")
                 );
                 List<String> header = new ArrayList<>();
-                for (LuceneFieldKeys field: LuceneFieldKeys.values()) {
-                    header.add(field.name());
-                }
-                writer.println(format.apply(header));
                 for (int id: hits.ids) {
-                    Document doc = reader.get(id);
                     List<String> line = new ArrayList<>();
-                    for (LuceneFieldKeys field: LuceneFieldKeys.values()) {
-                        line.add(doc.get(field.name()));
+                    Map<String, String> doc = SyslogReceiver.toMap(reader.get(id), getZoneOffset(ctx));
+                    if (header.size() == 0) {
+                        for (String key: doc.keySet()) {
+                            header.add(key);
+                        }
+                        writer.println(format.apply(header));
+                    }
+                    for (String key: header) {
+                        line.add(doc.get(key));
                     }
                     writer.println(format.apply(line));
                 }
@@ -359,9 +386,59 @@ public class Main
         );
     }
 
+    private static void importTsv(Context ctx) throws IOException, NumberFormatException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException {
+        int chunk = Integer.getInteger("lucene.migration.chunk", 1000);
+        for (UploadedFile file: ctx.uploadedFiles()) {
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(new GZIPInputStream(file.content())));) {
+                Map<LuceneFieldKeys, Integer> colum = null;
+                List<LuceneFieldKeys> target = Arrays.asList(
+                    LuceneFieldKeys.timestamp,
+                    LuceneFieldKeys.addr,
+                    LuceneFieldKeys.port,
+                    LuceneFieldKeys.raw
+                );
+                List<Document> docs = new ArrayList<>();
+                while (reader.ready()) {
+                    List<String> line = Arrays.asList(reader.readLine().split("\t")).stream().map(
+                        cell -> cell.replace("\\r", "\r")
+                    ).map(
+                        cell -> cell.replace("\\n", "\n")
+                    ).map(
+                        cell -> cell.replace("\\t", "\t")
+                    ).toList();
+                    if (colum == null) {
+                        colum = new HashMap<>();
+                        for (int i = 0; i < line.size(); i++) {
+                            LuceneFieldKeys field = LuceneFieldKeys.valueOf(line.get(i));
+                            if (target.contains(field)) {
+                                colum.put(field, i);
+                            }
+                        }
+                    } else {
+                        long timestamp = Long.valueOf(line.get(colum.get(LuceneFieldKeys.timestamp)));
+                        Document doc = SyslogReceiver.parse(
+                            timestamp,
+                            line.get(colum.get(LuceneFieldKeys.addr)),
+                            Integer.valueOf(line.get(colum.get(LuceneFieldKeys.port))),
+                            line.get(colum.get(LuceneFieldKeys.raw))
+                        );
+                        docs.add(doc);
+                        if (docs.size() == chunk) {
+                            lucene.add(docs);
+                            docs.clear();
+                        }
+                    }
+                }
+                if (docs.size() > 0) {
+                    lucene.add(docs);
+                }
+            }
+        }
+    }
+
     // TODO; 時間が掛かるためジョブまたはCLI
     private static void sqlite(Context ctx) throws IOException, ClassNotFoundException, SQLException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException, ParseException, QueryNodeException {
-        SearchResult hits = search(ctx.queryParam("query"));
+        SearchResult hits = search(ctx.queryParam("query"), getZoneOffset(ctx));
 
         String clazz = Settings.getSqliteAnalyzer();
         Analyzer analyzer = (Analyzer) Class.forName(clazz).getDeclaredConstructor().newInstance();
@@ -397,7 +474,7 @@ public class Main
             ) {
                 for (int count = 0; count < hits.ids.size(); count++) {
                     int id = hits.ids.get(count);
-                    Document doc = reader.get(id);
+                    Map<String, String> doc = SyslogReceiver.toMap(reader.get(id), getZoneOffset(ctx));
                     String message = doc.get(LuceneFieldKeys.message.name());
                     try (
                         TokenStream tokenizer = analyzer.tokenStream(

@@ -53,6 +53,7 @@
         DataTable,
         DatePicker,
         Dialog,
+        FileUpload,
         InputText,
         IftaLabel,
         MultiSelect,
@@ -84,7 +85,7 @@
             </div>
             <div style="display: flex; width: calc(100% - 100px);">
               <IftaLabel>
-                <DatePicker ref="datePicker" v-model="condition.day" inputId="day" :disabled="realtime" dateFormat="yy-mm-dd" showIcon @update:modelValue="dateSelect" :inputStyle="{'width': '110px'}" />
+                <DatePicker ref="datePicker" v-model="condition.day" inputId="day" :disabled="realtime" dateFormat="yy-mm-dd" showIcon selectionMode="range" :manualInput="false" @update:modelValue="dateSelect" :inputStyle="{'width': '210px'}" />
                 <label for="day">Day</label>
               </IftaLabel>
               <IftaLabel>
@@ -99,14 +100,15 @@
                 <MultiSelect v-model="condition.severity" inputId="severity" :disabled="realtime" :options="config.severity" style="width: 150px;" filter :maxSelectedLabels="1" @update:modelValue="search" />
                 <label for="severity">Severity</label>
               </IftaLabel>
-              <IftaLabel style="width: calc(100% - 760px);">
+              <IftaLabel style="width: calc(100% - 860px);">
                 <InputText type="text" v-model="condition.query" inputId="query" :disabled="realtime" style="width: 100%;" @keydown="$event.key == 'Enter' && search()" />
                 <label for="query">Query</label>
               </IftaLabel>
               <Button v-tooltip.bottom="'Search'" severity="success" icon="pi pi-search" :disabled="realtime" @click="search" />
               <Button v-tooltip.bottom="'Download'" severity="info" icon="pi pi-download" :disabled="realtime" @click="download" />
+              <Button v-tooltip.bottom="'Upload'" severity="danger" icon="pi pi-upload" :disabled="realtime" @click="showUploadDialog = true" />
               <Button v-tooltip.bottom="'Clear Filter'" severity="warn" icon="pi pi-filter-slash" :disabled="realtime" @click="clearFilter" />
-              <Button severity="help" icon="pi pi-cog" @click="showDialog = true" />
+              <Button severity="help" icon="pi pi-cog" @click="showConfigDialog = true" />
             </div>
           </div>
           <Splitter style="height: calc(100% - 58px);">
@@ -159,7 +161,8 @@
                         :field="field.name"
                         :header="field.name"
                         :headerStyle="{'background-color': 'lightgray'}"
-                      ></Column>
+                      >
+                      </Column>
                       <template #empty> no data. </template>
                     </DataTable>
                   </TabPanel>
@@ -180,7 +183,7 @@
               </Tabs>
             </SplitterPanel>
           </Splitter>
-          <Dialog v-model:visible="showDialog" modal header="Config">
+          <Dialog v-model:visible="showConfigDialog" modal header="Config">
             <div style="display: flex; width: 1000px; justify-content: space-around;">
               <div>
                 <h3>Tree</h3>
@@ -212,6 +215,12 @@
               </div>
             </div>
           </Dialog>
+          <Dialog v-model:visible="showUploadDialog" modal header="Upload">
+            <FileUpload ref="uploadfile" mode="basic" name="tsv" url="/api/import/tsv" />
+            <template #footer>
+              <Button label="Upload" @click="upload" severity="secondary" />
+            </template>
+          </Dialog>
           <div v-if="blocked" style="position: fixed; top: 0px; left: 0px; width: 100%; height: 100%; z-index: 9999; background-color: rgba(0, 0, 0, 0.4);"></div>
         `,
         data: function() {
@@ -219,7 +228,8 @@
             http: axios.create(),
             blocked: false,
             toast: useToast(),
-            showDialog: false,
+            showConfigDialog: false,
+            showUploadDialog: false,
             socket: null,
             realtime: false,
             tab: 'table',
@@ -229,7 +239,7 @@
               severity: [],
             },
             condition: {
-              day: null,
+              day: [new Date(new Date().setDate(new Date().getDate() - 6)), new Date()],
               host: [],
               facility: [],
               severity: [],
@@ -246,8 +256,9 @@
                 {name: 'message'},
               ], [
                 // {name: 'id'},
-                {name: 'format'},
                 {name: 'timestamp'},
+                {name: 'order'},
+                {name: 'format'},
                 {name: 'addr'},
                 {name: 'port'},
                 {name: 'raw'},
@@ -259,11 +270,18 @@
               selected: null
             },
             axis: {
-              'day': {
-                query: value => `day:"${value}"`,
-                format: log => log.day,
-                align: data => [...new Set(data)].sort()
-              },
+              // 'timestamp': {
+              //   query: value => {
+              //     var format = date => {
+              //       return `${date.getFullYear()}-${('0' + (date.getMonth() + 1)).slice(-2)}-${('0' + date.getDate()).slice(-2)}`;
+              //     };
+              //     var before = new Date(value);
+              //     before.setDate(before.getDate() + 1);
+              //     return `timestamp:["${value}" TO "${format(before)}"]`;
+              //   },
+              //   format: log => log.timestamp,
+              //   align: data => [...new Set(data)].sort()
+              // },
               // TODO: TextFieldだと範囲指定ができない
               // 'time': {
               //   query: value => `time:["${value}:00:00" TO "${value}:59:59"]`,
@@ -315,8 +333,8 @@
                 'severity',
                 'host',
               ],[
-                'day',
-                'time',
+                // 'day',
+                // 'time',
                 'format',
                 'addr',
                 // 'port',  TODO: 数値はcount未対応
@@ -340,6 +358,7 @@
 
           this.$data.http.interceptors.request.use((config) => {
             return new Promise((resolve, reject) => {
+              config.headers['X-Tz-Offset'] = new Date().getTimezoneOffset().toString();
               count++;
               this.$data.blocked = true;
               this.$nextTick(() => resolve(config));
@@ -354,7 +373,7 @@
             return unblock().then(
               () => Promise.reject(error)
             ).then(() => {
-              console.log(error);
+              console.error(error);
               this.$data.toast.add({
                 severity: 'error',
                 summary: error,
@@ -424,7 +443,7 @@
             });
           },
           clearFilter: function() {
-            this.$data.condition.day = null;
+            this.$data.condition.day = [new Date(new Date().setDate(new Date().getDate() - 6)), new Date()];
             this.$data.condition.host = [];
             this.$data.condition.facility = [];
             this.$data.condition.severity = [];
@@ -434,16 +453,17 @@
             this.search();
           },
           dateSelect: function(event) {
-            this.search();
+            if (this.$data.condition.day?.at(1) != null) this.search();
           },
           getQuery: function(node, query) {
             query = `(${query || this.$data.condition.query?.trim() || '*:*'})`;
             node = node || this.$data.tree.selected;
-            if (this.$data.condition.day != null) {
-              var y = this.$data.condition.day.getFullYear();
-              var m = ('0' + (this.$data.condition.day.getMonth() + 1)).slice(-2);
-              var d = ('0' + this.$data.condition.day.getDate()).slice(-2);
-              query = `${query} AND day:"${y}-${m}-${d}"`;
+            if (this.$data.condition.day?.at(1) != null) {
+              var [from, to] = this.$data.condition.day;
+              var format = date => {
+                return `${date.getFullYear()}-${('0' + (date.getMonth() + 1)).slice(-2)}-${('0' + date.getDate()).slice(-2)}`;
+              };
+              query = `${query} AND timestamp:["${format(from)} 00:00:00.000" TO "${format(to)} 23:59:59.999"]`;
             }
             if (this.$data.condition.host.length > 0) {
               query = `${query} AND (${this.$data.condition.host.map(x => `host:"${x}"`).join(' OR ')})`;
@@ -526,8 +546,11 @@
           download: function() {
             var a = document.createElement('a');
             a.target = '_blank';
-            a.href = `/api/export/tsv?query=${encodeURIComponent(this.getQuery())}`;
+            a.href = `/api/export/sqlite?query=${encodeURIComponent(this.getQuery())}`;
             a.click();
+          },
+          upload: function() {
+            this.$refs.uploadfile.upload();
           },
           switchRealTimeMode() {
             this.$data.table.logs = [];
@@ -715,6 +738,7 @@
         DataTable,
         DatePicker,
         Dialog,
+        FileUpload,
         InputText,
         IftaLabel,
         MultiSelect,

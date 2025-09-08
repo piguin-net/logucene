@@ -7,8 +7,10 @@ import java.net.DatagramSocket;
 import java.net.SocketException;
 import java.nio.ByteBuffer;
 import java.text.DecimalFormat;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
-import java.time.ZonedDateTime;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -23,9 +25,12 @@ import java.util.function.Supplier;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.IntPoint;
+import org.apache.lucene.document.LongField;
 import org.apache.lucene.document.LongPoint;
 import org.apache.lucene.document.SortedDocValuesField;
+import org.apache.lucene.document.SortedNumericDocValuesField;
 import org.apache.lucene.document.StoredField;
+import org.apache.lucene.document.StringField;
 import org.apache.lucene.document.TextField;
 import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.queryparser.flexible.core.QueryNodeException;
@@ -43,7 +48,6 @@ import org.slf4j.spi.LoggingEventBuilder;
 import com.example.LuceneManager.LuceneReader;
 import com.example.SyslogParser.Facility;
 import com.example.SyslogParser.Rfc3164;
-import com.example.SyslogParser.Rfc5424;
 import com.example.SyslogParser.Severity;
 import com.example.SyslogParser.SyslogParseException;
 
@@ -53,42 +57,63 @@ public class SyslogReceiver implements Runnable {
 
     private Logger logger = LoggerFactory.getLogger(this.getClass());
 
-    // TODO: TextFieldではなくStringFieldかKeywordFieldを使いたい
+    public static enum Time {
+        SECOND(1000),
+        MINUTE(Time.SECOND.time * 60),
+        HOUR(Time.MINUTE.time * 60),
+        DAY(Time.HOUR.time * 24);
+
+        private final int time;
+
+        private Time(int time) {
+            this.time = time;
+        }
+
+        public int getTime() {
+            return this.time;
+        }
+    }
+
     public static enum LuceneFieldKeys {
-        timestamp(LongPoint.class, long.class, new PointsConfig(new DecimalFormat(), Long.class)),
-        day(TextField.class, String.class),
-        time(TextField.class, String.class),
-        host(TextField.class, String.class),
-        addr(TextField.class, String.class),
-        port(IntPoint.class, int.class, new PointsConfig(new DecimalFormat(), Integer.class)),
-        facility(TextField.class, String.class),
-        severity(TextField.class, String.class),
-        format(TextField.class, String.class),
+        order(LongField.class, long.class),
+        timestamp(LongPoint.class, long[].class),
+        host(StringField.class, String.class),
+        addr(StringField.class, String.class),
+        port(IntPoint.class, int[].class),
+        facility(StringField.class, String.class),
+        severity(StringField.class, String.class),
+        format(StringField.class, String.class),
         message(TextField.class, String.class),
         raw(TextField.class, String.class);
 
         private Class<? extends Field> fieldClazz;
         private Class<?> valueClazz;
-        private PointsConfig pointsConfig;
 
         <T extends Field> LuceneFieldKeys(Class<T> fieldClazz, Class<?> valueClazz) {
-            this(fieldClazz, valueClazz, null);
-        }
-
-        <T extends Field> LuceneFieldKeys(Class<T> fieldClazz, Class<?> valueClazz, PointsConfig pointsConfig) {
             this.fieldClazz = fieldClazz;
             this.valueClazz = valueClazz;
-            this.pointsConfig = pointsConfig;
+        }
+
+        public Class<? extends Field> getFieldClass() {
+            return this.fieldClazz;
         }
 
         public <T> Field field(T value) throws InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException {
-            if (Arrays.asList(IntPoint.class, LongPoint.class).contains(this.fieldClazz)) {
+            if (this.fieldClazz.equals(IntPoint.class)) {
                 return this.fieldClazz.getDeclaredConstructor(
                     String.class,
                     this.valueClazz
                 ).newInstance(
                     this.name(),
-                    value
+                    new int[]{(int) value}
+                );
+            } else if (this.fieldClazz.equals(LongPoint.class)) {
+                return this.fieldClazz.getDeclaredConstructor(
+                    String.class,
+                    this.valueClazz
+                ).newInstance(
+                    this.name(),
+                    new long[]{(long) value}
                 );
             } else {
                 return this.fieldClazz.getDeclaredConstructor(
@@ -103,13 +128,23 @@ public class SyslogReceiver implements Runnable {
             }
         }
 
-        public static Map<String, PointsConfig> getPointsConfig() {
+        public static Map<String, PointsConfig> getPointsConfig(ZoneOffset offset) {
             return new HashMap<>() {{
-                for (LuceneFieldKeys field: LuceneFieldKeys.values()) {
-                    if (field.pointsConfig != null) {
-                        this.put(field.name(), field.pointsConfig);
+                DateTimeFormatter format = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
+                this.put(LuceneFieldKeys.port.name(), new PointsConfig(new DecimalFormat(), Integer.class));
+                this.put(LuceneFieldKeys.timestamp.name(), new PointsConfig(new DecimalFormat() {
+                    @Override
+                    public Number parse(String text) throws java.text.ParseException {
+                        for (String value: Arrays.asList(text, text + ".000", text + ":00.000", text + " 00:00:00.000")) {
+                            try {
+                                return LocalDateTime.parse(value, format).atOffset(offset).toInstant().toEpochMilli();
+                            } catch (Exception e) {
+                                // pass
+                            }
+                        }
+                        throw new java.text.ParseException("illegal date format.", -1);
                     }
-                }
+                }, Long.class));
             }};
         }
     };
@@ -162,9 +197,8 @@ public class SyslogReceiver implements Runnable {
                     };
                     try {
                         // TODO; バッファリング
-                        ZonedDateTime now = ZonedDateTime.now();
                         Document doc = SyslogReceiver.parse(
-                            now,
+                            new Date().getTime(),
                             packet.getAddress().getHostAddress(),
                             packet.getPort(),
                             message
@@ -194,13 +228,13 @@ public class SyslogReceiver implements Runnable {
         if (!this.socket.isClosed()) this.socket.close();
     }
 
-    private static Document parse(ZonedDateTime timestamp, String addr, int port, String message) throws InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException {
-        ZoneId userTimezone = ZoneId.of(Settings.getUserTimezone());
+    public static Document parse(long timestamp, String addr, int port, String message) throws InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException {
         Supplier<Document> init = () -> {
             Document doc = new Document();
             try {
                 doc.add(LuceneFieldKeys.raw.field(message));
-                doc.add(LuceneFieldKeys.timestamp.field(timestamp.toInstant().toEpochMilli()));
+                doc.add(LuceneFieldKeys.order.field(timestamp));
+                doc.add(LuceneFieldKeys.timestamp.field(timestamp));
                 doc.add(LuceneFieldKeys.addr.field(addr));
                 doc.add(LuceneFieldKeys.port.field(port));
             } catch (Exception e) {
@@ -215,13 +249,6 @@ public class SyslogReceiver implements Runnable {
             doc.add(LuceneFieldKeys.severity.field(log.severity.name()));
             doc.add(LuceneFieldKeys.host.field(log.host));
             doc.add(LuceneFieldKeys.message.field(log.message));
-            ZoneId syslogTimezone = log instanceof Rfc5424
-                ? ((Rfc5424) log).zone
-                : ZoneId.of(Settings.getSyslogTimezone(addr));
-            ZonedDateTime date = log.date.atZone(syslogTimezone);
-            date = date.withZoneSameInstant(userTimezone);
-            doc.add(LuceneFieldKeys.day.field(date.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))));
-            doc.add(LuceneFieldKeys.time.field(date.format(DateTimeFormatter.ofPattern("HH:mm:ss"))));
             doc.add(LuceneFieldKeys.format.field(log.format));
             return doc;
         } catch (SyslogParseException e) {
@@ -231,21 +258,31 @@ public class SyslogReceiver implements Runnable {
                 doc.add(LuceneFieldKeys.severity.field(Severity.of(priority).name()));
             }
             doc.add(LuceneFieldKeys.host.field(addr));
-            doc.add(LuceneFieldKeys.day.field(timestamp.withZoneSameInstant(userTimezone).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))));
-            doc.add(LuceneFieldKeys.time.field(timestamp.withZoneSameInstant(userTimezone).format(DateTimeFormatter.ofPattern("HH:mm:ss"))));
             doc.add(LuceneFieldKeys.message.field(message));
             doc.add(LuceneFieldKeys.format.field("unknown"));
             return doc;
         } finally {
             // TODO: 処理を共通化
-            doc.add(new StoredField(LuceneFieldKeys.timestamp.name(), timestamp.toInstant().toEpochMilli()));
-            doc.add(new SortedDocValuesField(LuceneFieldKeys.timestamp.name(), new BytesRef(ByteBuffer.allocate(8).putLong(timestamp.toInstant().toEpochMilli()).array())));
+            doc.add(new SortedNumericDocValuesField(LuceneFieldKeys.order.name(), timestamp));
+            doc.add(new StoredField(LuceneFieldKeys.timestamp.name(), timestamp));
+            doc.add(new SortedDocValuesField(LuceneFieldKeys.timestamp.name(), new BytesRef(ByteBuffer.allocate(8).putLong(timestamp).array())));
             doc.add(new StoredField(LuceneFieldKeys.port.name(), port));
             doc.add(new SortedDocValuesField(LuceneFieldKeys.port.name(), new BytesRef(ByteBuffer.allocate(4).putInt(port).array())));
-            for (LuceneFieldKeys field: Arrays.asList(LuceneFieldKeys.values()).stream().filter(field -> field.fieldClazz == TextField.class).toList()) {
+            for (LuceneFieldKeys field: Arrays.asList(LuceneFieldKeys.values()).stream().filter(field -> field.fieldClazz == StringField.class).toList()) {
                 doc.add(new SortedDocValuesField(field.name(), new BytesRef(doc.get(field.name()))));
             }
         }
+    }
+
+    public static Map<String, String> toMap(Document doc, ZoneOffset offset) {
+        OffsetDateTime timestamp = LocalDateTime.ofInstant(new Date(Long.valueOf(doc.get(LuceneFieldKeys.timestamp.name()))).toInstant(), ZoneId.of("UTC")).atOffset(ZoneOffset.UTC).withOffsetSameInstant(offset);
+        return new HashMap<>() {{
+            this.put("day", timestamp.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
+            this.put("time", timestamp.format(DateTimeFormatter.ofPattern("HH:mm:ss")));
+            for (LuceneFieldKeys field: LuceneFieldKeys.values()) {
+                this.put(field.name(), doc.get(field.name()));
+            }
+        }};
     }
 
     public static void main(String[] args) throws InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException, ClassNotFoundException, IOException, ParseException, QueryNodeException  {
@@ -258,20 +295,19 @@ public class SyslogReceiver implements Runnable {
                 LuceneFieldKeys.message.name(),
                 "*:*",
                 new Sort(new SortedNumericSortField(
-                    LuceneFieldKeys.timestamp.name(),
+                    LuceneFieldKeys.order.name(),
                     SortField.Type.LONG,
                     true
                 )),
-                LuceneFieldKeys.getPointsConfig()
+                LuceneFieldKeys.getPointsConfig(ZoneOffset.UTC)
             );
             int chunk = Integer.getInteger("lucene.migration.chunk", 1000);
             List<Document> docs = new ArrayList<>();
-            ZoneId userTimezone = ZoneId.of(Settings.getUserTimezone());
             for (ScoreDoc score: ProgressBar.wrap(Arrays.asList(hits.scoreDocs), "migration")) {
                 Document srcDoc = reader.get(score.doc);
                 long timestamp = Long.valueOf(srcDoc.get(LuceneFieldKeys.timestamp.name()));
                 Document dstDoc = SyslogReceiver.parse(
-                    ZonedDateTime.ofInstant(new Date(timestamp).toInstant(), userTimezone),
+                    timestamp,
                     srcDoc.get(LuceneFieldKeys.addr.name()),
                     Integer.valueOf(srcDoc.get(LuceneFieldKeys.port.name())),
                     srcDoc.get(LuceneFieldKeys.raw.name())
