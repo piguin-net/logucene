@@ -85,7 +85,7 @@
             </div>
             <div style="display: flex; width: calc(100% - 100px);">
               <IftaLabel>
-                <DatePicker ref="datePicker" v-model="condition.day" :minDate="config.day.min" :maxDate="config.day.max" inputId="day" :disabled="realtime" dateFormat="yy-mm-dd" showIcon selectionMode="range" :manualInput="false" @update:modelValue="dateSelect" :inputStyle="{'width': '210px'}" />
+                <DatePicker ref="datePicker" v-model="condition.day" :minDate="config.day.min" :maxDate="config.day.max" inputId="day" :disabled="realtime" showIcon selectionMode="range" :manualInput="false" @update:modelValue="dateSelect" :inputStyle="{'width': '210px'}" />
                 <label for="day">Day</label>
               </IftaLabel>
               <IftaLabel>
@@ -390,6 +390,9 @@
             });
           });
 
+          var config = PrimeVue.usePrimeVue().config;
+          console.debug(config);
+
           this.$data.http.get(
             '/api/config'
           ).then(response => {
@@ -399,6 +402,13 @@
             this.$data.config.day.min  = new Date(response.data.day.min);
             this.$data.config.day.max  = new Date(response.data.day.max);
             this.$data.condition.day   = [this.$data.config.day.min, this.$data.config.day.max];
+            config.locale.dateFormat      = 'yy-mm-dd';
+            config.locale.dayNames        = response.data.dayNames;
+            config.locale.dayNamesMin     = response.data.dayNamesMin;
+            config.locale.dayNamesShort   = response.data.dayNamesShort;
+            config.locale.monthNames      = response.data.monthNames;
+            config.locale.monthNamesShort = response.data.monthNamesShort;
+            console.debug(config);
           }).then(
             () => this.search()
           ).catch(e => {
@@ -725,20 +735,9 @@
 
       const app = createApp(root);
 
-      // TODO: JavaにはLocaleごとの定義があるため、それを取得する
-      const month = [...Array(12)].map((_, i) => `${i + 1}月`);
-      const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'];
-
       app.use(Config, {
         theme: {
           preset: Themes.Nora
-        },
-        locale: {
-          dayNames: dayOfWeek,
-          dayNamesShort: dayOfWeek,
-          dayNamesMin: dayOfWeek,
-          monthNames: month,
-          monthNamesShort: month
         }
       }).use(
         ToastService

@@ -14,12 +14,16 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.DayOfWeek;
+import java.time.Month;
 import java.time.ZoneOffset;
+import java.time.format.TextStyle;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.function.Function;
@@ -249,7 +253,7 @@ public class Main
                         LuceneFieldKeys.getPointsConfig(getZoneOffset(ctx.cookieMap())),
                         LuceneFieldKeys.host.name()
                     );
-                    this.addAll(count.keySet().stream().map(key -> key.utf8ToString()).toList());
+                    this.addAll(count.keySet().stream().map(key -> key.utf8ToString()).sorted().toList());
                 }
             }});
             this.put("day", new HashMap<>() {{
@@ -274,6 +278,35 @@ public class Main
                     }
                 }
             }});
+            Locale locale = Locale.of(ctx.header("accept-language").split(",")[0]);
+            this.put("monthNames", Arrays.asList(
+                Month.values()
+            ).stream().map(
+                x -> x.getDisplayName(TextStyle.FULL, locale)
+            ).toList());
+            this.put("monthNamesShort", Arrays.asList(
+                Month.values()
+            ).stream().map(
+                x -> x.getDisplayName(TextStyle.SHORT, locale)
+            ).toList());
+            List<DayOfWeek> dayOfWeeks = Arrays.asList(
+                DayOfWeek.SUNDAY,
+                DayOfWeek.MONDAY,
+                DayOfWeek.TUESDAY,
+                DayOfWeek.WEDNESDAY,
+                DayOfWeek.THURSDAY,
+                DayOfWeek.FRIDAY,
+                DayOfWeek.SATURDAY
+            );
+            this.put("dayNames", dayOfWeeks.stream().map(
+                x -> x.getDisplayName(TextStyle.FULL, locale)
+            ).toList());
+            this.put("dayNamesMin", dayOfWeeks.stream().map(
+                x -> x.getDisplayName(TextStyle.NARROW, locale)
+            ).toList());
+            this.put("dayNamesShort", dayOfWeeks.stream().map(
+                x -> x.getDisplayName(TextStyle.SHORT, locale)
+            ).toList());
         }};
         ctx.json(result);
     }
