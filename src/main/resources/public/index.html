@@ -429,9 +429,7 @@
             var axis = [...node.data.axis];
             var field = axis.shift();
             var query = encodeURIComponent(this.getQuery(node));
-            this.$data.http.get(
-              `/api/group/count?query=${query}&field=${field}`
-            ).then(response => {
+            this.groupCount(query, field).then(response => {
               var count = response.data;
               var total = Object.values(response.data).reduce((acc, x) => acc + x);
               node.children = Object.keys(count).sort(
@@ -522,6 +520,9 @@
               }];
             });
           },
+          groupCount: function(query, field) {
+            return this.$data.http.get(`/api/group/count?query=${query}&field=${field}`);
+          },
           pageChange: function(event, showToast) {
             this.$data.table.rows = event?.rows || this.$data.table.rows;
             this.$data.table.first = event?.first || 0;
@@ -610,7 +611,6 @@
           },
           showChart: function() {
             if (this.$data.tab == 'barchart') {
-              var query = encodeURIComponent(this.getQuery());
               var yaxis = this.$data.axis[this.$data.barchart.yaxis];
               var xaxis = this.$data.axis[this.$data.barchart.xaxis];
               var promise = (this.$data.realtime
@@ -632,8 +632,8 @@
                     return result;
                   })
                 : Promise.all([
-                    this.$data.http.get(`/api/group/count?query=${query}&field=${this.$data.barchart.yaxis}`),
-                    this.$data.http.get(`/api/group/count?query=${query}&field=${this.$data.barchart.xaxis}`),
+                    this.groupCount(encodeURIComponent(this.getQuery()), this.$data.barchart.yaxis),
+                    this.groupCount(encodeURIComponent(this.getQuery()), this.$data.barchart.xaxis),
                   ]).then(([y, x]) => {
                     var result = {
                       yaxis: yaxis.collect(Object.keys(y.data)),
@@ -648,7 +648,10 @@
                     }
                     return new Promise((resolve, reject) => {
                       Promise.all(result.yaxis.map(y => {
-                        return this.$data.http.get(`/api/group/count?query=${query} AND ${yaxis.query(y)}&field=${this.$data.barchart.xaxis}`).then(x => {
+                        return this.groupCount(
+                          `${encodeURIComponent(this.getQuery())} AND ${yaxis.query(y)}`,
+                          this.$data.barchart.xaxis
+                        ).then(x => {
                           for (var [key, value] of Object.entries(x.data)) {
                             result.count[y][key] = value;
                           }
