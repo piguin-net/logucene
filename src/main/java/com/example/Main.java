@@ -168,7 +168,7 @@ public class Main
         ).get(
             "/api/documents", Main::documents
         ).get(
-            "/api/count", Main::count
+            "/api/group/count", Main::groupCount
         ).get(
             "/api/export/sqlite", Main::sqlite
         ).get(
@@ -243,7 +243,7 @@ public class Main
             this.put("severity", Arrays.asList(Severity.values()).stream().map(item -> item.name()).toList());
             this.put("host", new ArrayList<>() {{
                 try (LuceneReader reader = lucene.getReader();) {
-                    Map<BytesRef, Long> count = reader.count(
+                    Map<BytesRef, Long> count = reader.groupCount(
                         LuceneFieldKeys.message.name(),
                         "*:*",
                         LuceneFieldKeys.getPointsConfig(getZoneOffset(ctx.cookieMap())),
@@ -329,10 +329,10 @@ public class Main
         }
     }
 
-    private static void count(Context ctx) throws ParseException, IOException, QueryNodeException {
+    private static void groupCount(Context ctx) throws ParseException, IOException, QueryNodeException {
         try (LuceneReader reader = lucene.getReader();) {
             String field = ctx.queryParam("field");
-            Map<BytesRef, Long> result = reader.count(
+            Map<BytesRef, Long> result = reader.groupCount(
                 LuceneFieldKeys.message.name(),
                 ctx.queryParam("query"),
                 LuceneFieldKeys.getPointsConfig(getZoneOffset(ctx.cookieMap())),

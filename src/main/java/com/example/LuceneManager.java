@@ -68,7 +68,7 @@ public class LuceneManager implements Closeable {
             return storedFields.document(id);
         }
 
-        public <T> Map<T, Long> count(String field, String query, Map<String, PointsConfig> pointsConfig, String groupField) throws IOException, QueryNodeException {
+        public <T> Map<T, Long> groupCount(String field, String query, Map<String, PointsConfig> pointsConfig, String groupField) throws IOException, QueryNodeException {
             GroupingSearch groupingSearch = new GroupingSearch(groupField);
             StandardQueryParser parser = new StandardQueryParser(this.analyzer);
             parser.setPointsConfigMap(pointsConfig);

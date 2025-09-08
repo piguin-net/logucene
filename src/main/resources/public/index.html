@@ -430,7 +430,7 @@
             var field = axis.shift();
             var query = encodeURIComponent(this.getQuery(node));
             this.$data.http.get(
-              `/api/count?query=${query}&field=${field}`
+              `/api/group/count?query=${query}&field=${field}`
             ).then(response => {
               var count = response.data;
               var total = Object.values(response.data).reduce((acc, x) => acc + x);
@@ -632,8 +632,8 @@
                     return result;
                   })
                 : Promise.all([
-                    this.$data.http.get(`/api/count?query=${query}&field=${this.$data.barchart.yaxis}`),
-                    this.$data.http.get(`/api/count?query=${query}&field=${this.$data.barchart.xaxis}`),
+                    this.$data.http.get(`/api/group/count?query=${query}&field=${this.$data.barchart.yaxis}`),
+                    this.$data.http.get(`/api/group/count?query=${query}&field=${this.$data.barchart.xaxis}`),
                   ]).then(([y, x]) => {
                     var result = {
                       yaxis: yaxis.align(Object.keys(y.data)),
@@ -648,7 +648,7 @@
                     }
                     return new Promise((resolve, reject) => {
                       Promise.all(result.yaxis.map(y => {
-                        return this.$data.http.get(`/api/count?query=${query} AND ${yaxis.query(y)}&field=${this.$data.barchart.xaxis}`).then(x => {
+                        return this.$data.http.get(`/api/group/count?query=${query} AND ${yaxis.query(y)}&field=${this.$data.barchart.xaxis}`).then(x => {
                           for (var [key, value] of Object.entries(x.data)) {
                             result.count[y][key] = value;
                           }
