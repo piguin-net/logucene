@@ -270,11 +270,6 @@ public class Main
             SearchResult hits = search(ctx.queryParam("query"), getZoneOffset(ctx));
             Integer first = ctx.queryParam("first") != null ? Integer.valueOf(ctx.queryParam("first")) : 0;
             Integer last = ctx.queryParam("last") != null ? Integer.valueOf(ctx.queryParam("last")) : hits.ids.size();
-            List<String> fields = ctx.queryParam("fields") != null
-                ? Arrays.asList(ctx.queryParam("fields").split(","))
-                : Arrays.asList(LuceneFieldKeys.values()).stream().map(
-                    field -> field.name()
-                ).toList();
             List<Integer> ids = hits.ids.subList(
                 first,
                 last > hits.ids.size()
