@@ -345,7 +345,13 @@
           };
         },
         mounted: function() {
-          document.cookie = `X-Tz-Offset=${new Date().getTimezoneOffset()};`;
+          document.cookie = Object.entries({
+            'X-Tz-Offset': new Date().getTimezoneOffset(),
+          }).map(
+            ([key, value]) => `${key}=${value};`
+          ).reduce(
+            (acc, x) => `${acc} ${x}`
+          );
 
           var count = 0;
           var unblock = () => {
