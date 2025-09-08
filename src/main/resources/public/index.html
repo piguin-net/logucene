@@ -345,6 +345,8 @@
           };
         },
         mounted: function() {
+          document.cookie = `X-Tz-Offset=${new Date().getTimezoneOffset()};`;
+
           var count = 0;
           var unblock = () => {
             return new Promise((resolve, reject) => {
@@ -359,7 +361,6 @@
 
           this.$data.http.interceptors.request.use((config) => {
             return new Promise((resolve, reject) => {
-              config.headers['X-Tz-Offset'] = new Date().getTimezoneOffset().toString();
               count++;
               this.$data.blocked = true;
               this.$nextTick(() => resolve(config));

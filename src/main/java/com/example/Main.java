@@ -37,7 +37,6 @@ import org.apache.lucene.document.Document;
 import org.apache.lucene.document.KeywordField;
 import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.IndexNotFoundException;
-import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.queryparser.flexible.core.QueryNodeException;
 import org.apache.lucene.search.Sort;
@@ -105,8 +104,8 @@ public class Main
             watcher.addEventListener(doc -> {
                 try {
                     List<Integer> deleteTargets = new ArrayList<>();
-                    String json = mapper.writeValueAsString(convert(doc));
                     for (Map.Entry<Integer, WsConnectContext> connection: connections.entrySet()) {
+                        String json = mapper.writeValueAsString(SyslogReceiver.toMap(doc, getZoneOffset(connection.getValue().cookieMap())));
                         if (!connection.getValue().session.isOpen()) {
                             deleteTargets.add(connection.getValue().session.hashCode());
                         } else {
@@ -147,8 +146,8 @@ public class Main
         }
     }
 
-    private static ZoneOffset getZoneOffset(Context ctx) {
-        int offset = Integer.valueOf(ctx.header("X-Tz-Offset")) * -1;
+    private static ZoneOffset getZoneOffset(Map<String, String> cookies) {
+        int offset = Integer.valueOf(cookies.get("X-Tz-Offset")) * -1;
         return ZoneOffset.ofHoursMinutes(offset / 60, offset % 60);
     }
 
@@ -163,7 +162,7 @@ public class Main
                 staticFiles.location = Location.valueOf(System.getProperty("web.location", "CLASSPATH"));
             });
         }).get(
-            "/api/search", ctx -> ctx.json(search(ctx.queryParam("query"), getZoneOffset(ctx)))
+            "/api/search", ctx -> ctx.json(search(ctx.queryParam("query"), getZoneOffset(ctx.cookieMap())))
         ).get(
             "/api/config", Main::config
         ).get(
@@ -203,14 +202,6 @@ public class Main
             });
         });
         server.start(Settings.getWebPort());
-    }
-
-    private static Map<String, Object> convert(Document doc) {
-        return new HashMap<>() {{
-            for (IndexableField field: doc.getFields()) {
-                this.put(field.name(), doc.get(field.name()));
-            }
-        }};
     }
 
     private static SearchResult search(String query, ZoneOffset offset) throws ParseException, IOException, QueryNodeException {
@@ -255,7 +246,7 @@ public class Main
                     Map<BytesRef, Long> count = reader.count(
                         LuceneFieldKeys.message.name(),
                         "*:*",
-                        LuceneFieldKeys.getPointsConfig(getZoneOffset(ctx)),
+                        LuceneFieldKeys.getPointsConfig(getZoneOffset(ctx.cookieMap())),
                         LuceneFieldKeys.host.name()
                     );
                     this.addAll(count.keySet().stream().map(key -> key.utf8ToString()).toList());
@@ -271,7 +262,7 @@ public class Main
                             SortField.Type.LONG,
                             false
                         )),
-                        LuceneFieldKeys.getPointsConfig(getZoneOffset(ctx))
+                        LuceneFieldKeys.getPointsConfig(getZoneOffset(ctx.cookieMap()))
                     );
                     long now = new Date().getTime();
                     if (hits.scoreDocs.length > 0) {
@@ -289,7 +280,7 @@ public class Main
 
     private static void documents(Context ctx) throws ParseException, IOException, QueryNodeException {
         try {
-            SearchResult hits = search(ctx.queryParam("query"), getZoneOffset(ctx));
+            SearchResult hits = search(ctx.queryParam("query"), getZoneOffset(ctx.cookieMap()));
             Integer first = ctx.queryParam("first") != null ? Integer.valueOf(ctx.queryParam("first")) : 0;
             Integer last = ctx.queryParam("last") != null ? Integer.valueOf(ctx.queryParam("last")) : hits.ids.size();
             List<Integer> ids = hits.ids.subList(
@@ -309,7 +300,7 @@ public class Main
                     json.writeStartArray();
                     try (LuceneReader reader = lucene.getReader();) {
                         for (int id: ids) {
-                            Map<String, String> doc = SyslogReceiver.toMap(reader.get(id), getZoneOffset(ctx));
+                            Map<String, String> doc = SyslogReceiver.toMap(reader.get(id), getZoneOffset(ctx.cookieMap()));
                             json.writeStartObject();
                             json.writeNumberField("id", id);
                             for (Entry<String, String> entry: doc.entrySet()) {
@@ -344,7 +335,7 @@ public class Main
             Map<BytesRef, Long> result = reader.count(
                 LuceneFieldKeys.message.name(),
                 ctx.queryParam("query"),
-                LuceneFieldKeys.getPointsConfig(getZoneOffset(ctx)),
+                LuceneFieldKeys.getPointsConfig(getZoneOffset(ctx.cookieMap())),
                 field
             );
             Map<String, Long> count = new HashMap<>() {{
@@ -359,7 +350,7 @@ public class Main
     }
 
     private static void exportTsv(Context ctx) throws IOException, ClassNotFoundException, SQLException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException, ParseException, QueryNodeException {
-        SearchResult hits = search(ctx.queryParam("query"), getZoneOffset(ctx));
+        SearchResult hits = search(ctx.queryParam("query"), getZoneOffset(ctx.cookieMap()));
         PipedInputStream pin = new PipedInputStream();
         new Thread(() -> {
             try (
@@ -378,7 +369,7 @@ public class Main
                 List<String> header = new ArrayList<>();
                 for (int id: hits.ids) {
                     List<String> line = new ArrayList<>();
-                    Map<String, String> doc = SyslogReceiver.toMap(reader.get(id), getZoneOffset(ctx));
+                    Map<String, String> doc = SyslogReceiver.toMap(reader.get(id), getZoneOffset(ctx.cookieMap()));
                     if (header.size() == 0) {
                         for (String key: doc.keySet()) {
                             header.add(key);
@@ -455,7 +446,7 @@ public class Main
 
     // TODO; 時間が掛かるためジョブまたはCLI
     private static void sqlite(Context ctx) throws IOException, ClassNotFoundException, SQLException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException, ParseException, QueryNodeException {
-        SearchResult hits = search(ctx.queryParam("query"), getZoneOffset(ctx));
+        SearchResult hits = search(ctx.queryParam("query"), getZoneOffset(ctx.cookieMap()));
 
         String clazz = Settings.getSqliteAnalyzer();
         Analyzer analyzer = (Analyzer) Class.forName(clazz).getDeclaredConstructor().newInstance();
@@ -491,7 +482,7 @@ public class Main
             ) {
                 for (int count = 0; count < hits.ids.size(); count++) {
                     int id = hits.ids.get(count);
-                    Map<String, String> doc = SyslogReceiver.toMap(reader.get(id), getZoneOffset(ctx));
+                    Map<String, String> doc = SyslogReceiver.toMap(reader.get(id), getZoneOffset(ctx.cookieMap()));
                     String message = doc.get(LuceneFieldKeys.message.name());
                     try (
                         TokenStream tokenizer = analyzer.tokenStream(
