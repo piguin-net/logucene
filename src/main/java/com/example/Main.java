@@ -261,6 +261,28 @@ public class Main
                     this.addAll(count.keySet().stream().map(key -> key.utf8ToString()).toList());
                 }
             }});
+            this.put("day", new HashMap<>() {{
+                try (LuceneReader reader = lucene.getReader();) {
+                    TopDocs hits = reader.search(
+                        LuceneFieldKeys.message.name(),
+                        "*:*",
+                        new Sort(new SortedNumericSortField(
+                            LuceneFieldKeys.order.name(),
+                            SortField.Type.LONG,
+                            false
+                        )),
+                        LuceneFieldKeys.getPointsConfig(getZoneOffset(ctx))
+                    );
+                    long now = new Date().getTime();
+                    if (hits.scoreDocs.length > 0) {
+                        this.put("min", Long.valueOf(reader.get(hits.scoreDocs[0].doc).get(LuceneFieldKeys.timestamp.name())));
+                        this.put("max", Long.valueOf(reader.get(hits.scoreDocs[hits.scoreDocs.length - 1].doc).get(LuceneFieldKeys.timestamp.name())));
+                    } else {
+                        this.put("min", now);
+                        this.put("max", now);
+                    }
+                }
+            }});
         }};
         ctx.json(result);
     }

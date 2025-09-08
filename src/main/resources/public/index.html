@@ -85,7 +85,7 @@
             </div>
             <div style="display: flex; width: calc(100% - 100px);">
               <IftaLabel>
-                <DatePicker ref="datePicker" v-model="condition.day" inputId="day" :disabled="realtime" dateFormat="yy-mm-dd" showIcon selectionMode="range" :manualInput="false" @update:modelValue="dateSelect" :inputStyle="{'width': '210px'}" />
+                <DatePicker ref="datePicker" v-model="condition.day" :minDate="config.day.min" :maxDate="config.day.max" inputId="day" :disabled="realtime" dateFormat="yy-mm-dd" showIcon selectionMode="range" :manualInput="false" @update:modelValue="dateSelect" :inputStyle="{'width': '210px'}" />
                 <label for="day">Day</label>
               </IftaLabel>
               <IftaLabel>
@@ -234,12 +234,13 @@
             realtime: false,
             tab: 'table',
             config: {
+              day: {min: new Date(), max: new Date()},
               host: [],
               facility: [],
               severity: [],
             },
             condition: {
-              day: [new Date(new Date().setDate(new Date().getDate() - 6)), new Date()],
+              day: [null, null],
               host: [],
               facility: [],
               severity: [],
@@ -388,6 +389,9 @@
             this.$data.config.host     = response.data.host;
             this.$data.config.facility = response.data.facility;
             this.$data.config.severity = response.data.severity;
+            this.$data.config.day.min  = new Date(response.data.day.min);
+            this.$data.config.day.max  = new Date(response.data.day.max);
+            this.$data.condition.day   = [this.$data.config.day.min, this.$data.config.day.max];
           }).then(
             () => this.search()
           ).catch(e => {
