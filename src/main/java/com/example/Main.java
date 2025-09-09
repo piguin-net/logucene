@@ -238,13 +238,13 @@ public class Main
         ).get(
             "/api/group/count", Main::groupCount
         ).post(
-            "/api/export/sqlite", Main::exportSqlite
+            "/api/export/sqlite", Main::exportSqlite  // TODO: キャンセル
         ).post(
-            "/api/export/tsv", Main::exportTsv
+            "/api/export/tsv", Main::exportTsv  // TODO: キャンセル
         ).get(
             "/api/download", Main::download
         ).post(
-            "/api/import/tsv", Main::importTsv
+            "/api/import/tsv", Main::importTsv  // TODO: キャンセル
         ).get(
             "/api/task", Main::getTasks
         ).delete(
