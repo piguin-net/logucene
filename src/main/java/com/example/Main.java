@@ -614,6 +614,8 @@ public class Main
                         }
                     }
                 };
+                // TODO: この方法だと、途中でエラーが発生した場合、中途半端にデータが登録されるため、
+                //       一時ディレクトリでindexを作成し、IndexWriter.addIndexesでマージする
                 lucene.add(docs);
             });
 
