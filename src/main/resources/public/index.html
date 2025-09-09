@@ -216,7 +216,7 @@
             </div>
           </Dialog>
           <Dialog v-model:visible="dialog.download.show" modal header="Download">
-            <DataTable :value="Object.values(tasks.list).filter(task => task.type == 'export').sort((a, b) => a.start < b.start ? -1 : a.start > b.start ? 1 : 0)">
+            <DataTable :value="Object.values(jobs.list).filter(job => job.type == 'export').sort((a, b) => a.start < b.start ? -1 : a.start > b.start ? 1 : 0)">
               <Column field="start" header="Start" style="width: 180px;"></Column>
               <Column field="finish" header="Finish" style="width: 180px;"></Column>
               <Column field="format" header="Format" style="width: 80px;"></Column>
@@ -234,19 +234,19 @@
                 <template #body="slotProps">
                   <div style="display: flex; gap: 0.5rem;">
                     <Button label="Download" icon="pi pi-download" severity="info" :disabled="!slotProps.data.finish || slotProps.data.error" @click="download(slotProps.data.id)" severity="secondary" />
-                    <Button label="Remove" icon="pi pi-trash" severity="danger" :disabled="!slotProps.data.finish" @click="removeTask(slotProps.data.id)" severity="secondary" />
+                    <Button label="Remove" icon="pi pi-trash" severity="danger" :disabled="!slotProps.data.finish" @click="removeJob(slotProps.data.id)" severity="secondary" />
                   </div>
                 </template>
               </Column>
               <template #empty> no data. </template>
             </DataTable>
             <template #footer>
-              <Button label="SQLite" icon="pi pi-database" @click="startExportTask('sqlite')" severity="secondary" />
-              <Button label="TSV" icon="pi pi-file" @click="startExportTask('tsv')" severity="secondary" />
+              <Button label="SQLite" icon="pi pi-database" @click="startExportJob('sqlite')" severity="secondary" />
+              <Button label="TSV" icon="pi pi-file" @click="startExportJob('tsv')" severity="secondary" />
             </template>
           </Dialog>
           <Dialog v-model:visible="dialog.upload.show" modal header="Upload">
-            <DataTable :value="Object.values(tasks.list).filter(task => task.type == 'import').sort((a, b) => a.start < b.start ? -1 : a.start > b.start ? 1 : 0)">
+            <DataTable :value="Object.values(jobs.list).filter(job => job.type == 'import').sort((a, b) => a.start < b.start ? -1 : a.start > b.start ? 1 : 0)">
               <Column field="start" header="Start" style="width: 180px;"></Column>
               <Column field="finish" header="Finish" style="width: 180px;"></Column>
               <Column field="format" header="Format" style="width: 80px;"></Column>
@@ -264,7 +264,7 @@
                 <template #body="slotProps">
                   <div style="display: flex; gap: 0.5rem;">
                     <Button label="Download" icon="pi pi-download" severity="info" :disabled="!slotProps.data.finish || slotProps.data.error" @click="download(slotProps.data.id)" severity="secondary" />
-                    <Button label="Remove" icon="pi pi-trash" severity="danger" :disabled="!slotProps.data.finish" @click="removeTask(slotProps.data.id)" severity="secondary" />
+                    <Button label="Remove" icon="pi pi-trash" severity="danger" :disabled="!slotProps.data.finish" @click="removeJob(slotProps.data.id)" severity="secondary" />
                   </div>
                 </template>
               </Column>
@@ -287,7 +287,7 @@
               download: {show: false},
               upload: {show: false},
             },
-            tasks: {
+            jobs: {
               list: {},
               socket: null
             },
@@ -453,22 +453,22 @@
             });
           });
 
-          this.$data.tasks.socket = new WebSocket("/ws/task");
-          this.$data.tasks.socket.addEventListener("message", event => {
+          this.$data.jobs.socket = new WebSocket("/ws/job");
+          this.$data.jobs.socket.addEventListener("message", event => {
             var message = JSON.parse(event.data);
             if (message.event == 'remove') {
-              this.$data.tasks.list = Object.values(
-                this.$data.tasks.list
+              this.$data.jobs.list = Object.values(
+                this.$data.jobs.list
               ).filter(
-                task => task.id != message.id
+                job => job.id != message.id
               ).reduce(
-                (tasks, task) => {
-                  tasks[task.id] = task;
-                  return tasks;
+                (jobs, job) => {
+                  jobs[job.id] = job;
+                  return jobs;
                 }, {}
               );
             } else {
-              this.$data.tasks.list[message.id] = message;
+              this.$data.jobs.list[message.id] = message;
             }
           });
 
@@ -506,18 +506,18 @@
           },
           showDownloadDialog: function() {
             this.$data.http.get(
-              '/api/task'
+              '/api/job'
             ).then(
-              response => this.$data.tasks.list = response.data
+              response => this.$data.jobs.list = response.data
             ).then(
               () => this.$data.dialog.download.show = true
             );
           },
           showUploadDialog: function() {
             this.$data.http.get(
-              '/api/task'
+              '/api/job'
             ).then(
-              response => this.$data.tasks.list = response.data
+              response => this.$data.jobs.list = response.data
             ).then(
               () => this.$data.dialog.upload.show = true
             );
@@ -668,7 +668,7 @@
               });
             });
           },
-          startExportTask: function(format) {
+          startExportJob: function(format) {
             this.$data.http.post(`/api/export/${format}?query=${encodeURIComponent(this.getQuery())}`);
           },
           download: function(id) {
@@ -677,8 +677,8 @@
             a.href = `/api/download?id=${id}`;
             a.click();
           },
-          removeTask: function(id) {
-            this.$data.http.delete(`/api/task?id=${id}`);
+          removeJob: function(id) {
+            this.$data.http.delete(`/api/job?id=${id}`);
           },
           upload: function() {
             this.$refs.uploadfile.upload();

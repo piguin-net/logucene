@@ -59,7 +59,6 @@ import org.slf4j.LoggerFactory;
 
 import com.example.Job.Progress;
 import com.example.LuceneManager.LuceneReader;
-import com.example.LuceneManager.LuceneTransaction;
 import com.example.SyslogParser.Facility;
 import com.example.SyslogParser.Severity;
 import com.example.SyslogReceiver.LuceneFieldKeys;
@@ -87,7 +86,7 @@ public class Main
     private static SyslogReceiver watcher;
     private static Thread worker;
     private static Map<Integer, WsConnectContext> realtimeConnections = new HashMap<>();
-    private static Map<Integer, WsConnectContext> taskConnections = new HashMap<>();
+    private static Map<Integer, WsConnectContext> jobConnections = new HashMap<>();
     private static String script = Settings.getSyslogListener();
     private static ScriptEngineManager manager = new ScriptEngineManager();
     private static ScriptEngine engine = manager.getEngineByName("groovy");
@@ -249,9 +248,9 @@ public class Main
         ).post(
             "/api/import/tsv", Main::importTsv  // TODO: キャンセル
         ).get(
-            "/api/task", Main::getTasks
+            "/api/job", Main::getJobs
         ).delete(
-            "/api/task", Main::removeTask
+            "/api/job", Main::removeJob
         ).before(
             ctx -> ctx.attribute("start", new Date().getTime())
         ).after(
@@ -277,18 +276,18 @@ public class Main
             ws.onError(ctx -> {
                 logger.atError().addKeyValue("addr", ctx.host()).log("realtime ws error.");
             });
-        }).ws("/ws/task", ws -> {
+        }).ws("/ws/job", ws -> {
             ws.onConnect(ctx -> {
-                logger.atInfo().addKeyValue("addr", ctx.host()).log("task ws connected.");
+                logger.atInfo().addKeyValue("addr", ctx.host()).log("job ws connected.");
                 ctx.enableAutomaticPings();
-                taskConnections.put(ctx.session.hashCode(), ctx);
+                jobConnections.put(ctx.session.hashCode(), ctx);
             });
             ws.onClose(ctx -> {
-                logger.atInfo().addKeyValue("addr", ctx.host()).log("task ws closed.");
-                taskConnections.remove(ctx.session.hashCode());
+                logger.atInfo().addKeyValue("addr", ctx.host()).log("job ws closed.");
+                jobConnections.remove(ctx.session.hashCode());
             });
             ws.onError(ctx -> {
-                logger.atError().addKeyValue("addr", ctx.host()).log("task ws error.");
+                logger.atError().addKeyValue("addr", ctx.host()).log("job ws error.");
             });
         });
         server.start(Settings.getWebPort());
@@ -505,7 +504,7 @@ public class Main
 
         job.onUpdate((progress) -> {
             try {
-                notifyAll(taskConnections, payload(job, offset));
+                notifyAll(jobConnections, payload(job, offset));
             } catch (JsonProcessingException e) {
                 // TODO Auto-generated catch block
                 e.printStackTrace();
@@ -593,7 +592,7 @@ public class Main
 
             job.onUpdate((progress) -> {
                 try {
-                    notifyAll(taskConnections, payload(job, offset));
+                    notifyAll(jobConnections, payload(job, offset));
                 } catch (JsonProcessingException e) {
                     // TODO Auto-generated catch block
                     e.printStackTrace();
@@ -691,7 +690,7 @@ public class Main
 
         job.onUpdate((progress) -> {
             try {
-                notifyAll(taskConnections, payload(job, offset));
+                notifyAll(jobConnections, payload(job, offset));
             } catch (JsonProcessingException e) {
                 // TODO Auto-generated catch block
                 e.printStackTrace();
@@ -730,7 +729,7 @@ public class Main
         );
     }
 
-    private static void getTasks(Context ctx) {
+    private static void getJobs(Context ctx) {
         ZoneOffset offset = getZoneOffset(ctx.cookieMap());
         ctx.json(new HashMap<>() {{
             for (ImportExportJob job: jobs.values()) {
@@ -739,12 +738,12 @@ public class Main
         }});
     }
 
-    private static void removeTask(Context ctx) throws JsonProcessingException {
+    private static void removeJob(Context ctx) throws JsonProcessingException {
         int id = Integer.valueOf(ctx.queryParam("id"));
         ImportExportJob job = jobs.get(id);
         job.getData().delete();
         jobs.remove(id);
-        notifyAll(taskConnections, new HashMap<>() {{
+        notifyAll(jobConnections, new HashMap<>() {{
             this.put("type", job.getType());
             this.put("event", "remove");
             this.put("id", job.hashCode());
