@@ -475,15 +475,7 @@ public class Main
                 PrintWriter writer = new PrintWriter(new FileOutputStream(temp));
                 LuceneReader reader = lucene.getReader();
             ) {
-                Function<List<String>, String> format = row -> row.stream().map(
-                    cell -> cell.replace("\r", "\r")
-                ).map(
-                    cell -> cell.replace("\n", "\n")
-                ).map(
-                    cell -> cell.replace("\t", "\t")
-                ).collect(
-                    Collectors.joining("\t")
-                );
+                Function<List<String>, String> format = row -> String.join("\t", row);
                 List<String> header = new ArrayList<>();
                 for (int count = 0; count < hits.ids.size(); count++) {
                     progress.accept(new Progress(hits.total, count + 1));
@@ -559,14 +551,7 @@ public class Main
                     long count = 0;
                     while (reader.ready()) {
                         progress.accept(new Progress(entry.getValue(), ++count));
-                        // TODO: 登録の時点でエスケープする、"\\\\"が漏れている
-                        List<String> line = Arrays.asList(reader.readLine().split("\t")).stream().map(
-                            cell -> cell.replace("\r", "\r")
-                        ).map(
-                            cell -> cell.replace("\n", "\n")
-                        ).map(
-                            cell -> cell.replace("\t", "\t")
-                        ).toList();
+                        List<String> line = Arrays.asList(reader.readLine().split("\t"));
                         if (colum == null) {
                             colum = new HashMap<>();
                             for (int i = 0; i < line.size(); i++) {

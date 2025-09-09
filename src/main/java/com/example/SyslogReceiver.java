@@ -184,7 +184,11 @@ public class SyslogReceiver implements Runnable {
             while (this.active) {
                 try {
                     socket.receive(packet);
-                    String message = new String(packet.getData(), 0, packet.getLength());
+                    String message = new String(packet.getData(), 0, packet.getLength())
+                        .replace("\\", "\\\\")
+                        .replace("\r", "\\r")
+                        .replace("\n", "\\n")
+                        .replace("\t", "\\t");
                     Function<LoggingEventBuilder, LoggingEventBuilder> log = (builder) -> {
                         return builder.setMessage(
                             message
