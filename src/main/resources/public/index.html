@@ -271,7 +271,7 @@
               <template #empty> no data. </template>
             </DataTable>
             <template #footer>
-              <FileUpload ref="uploadfile" mode="basic" name="tsv" :multiple="true" url="/api/import/tsv" />
+              <FileUpload ref="uploadfile" mode="basic" name="tsv" :multiple="true" url="/api/import/tsv" @before-upload="blocked = true" @upload="blocked = false" @error="blocked = false" />
               <Button label="Upload" @click="upload" severity="secondary" />
             </template>
           </Dialog>
