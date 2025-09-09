@@ -2,9 +2,11 @@ package com.example;
 
 import java.io.BufferedReader;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
 import java.io.PrintWriter;
@@ -16,7 +18,9 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.DayOfWeek;
 import java.time.Month;
+import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.time.format.TextStyle;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -51,12 +55,14 @@ import org.apache.lucene.util.BytesRef;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.example.Job.Progress;
 import com.example.LuceneManager.LuceneReader;
 import com.example.SyslogParser.Facility;
 import com.example.SyslogParser.Severity;
 import com.example.SyslogReceiver.LuceneFieldKeys;
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.javalin.Javalin;
@@ -77,16 +83,80 @@ public class Main
     private static LuceneManager lucene;
     private static SyslogReceiver watcher;
     private static Thread worker;
-    private static Map<Integer, WsConnectContext> connections = new HashMap<>();
+    private static Map<Integer, WsConnectContext> realtimeConnections = new HashMap<>();
+    private static Map<Integer, WsConnectContext> taskConnections = new HashMap<>();
     private static String script = Settings.getSyslogListener();
     private static ScriptEngineManager manager = new ScriptEngineManager();
     private static ScriptEngine engine = manager.getEngineByName("groovy");
+    private static Map<Integer, ImportExportJob> jobs = new HashMap<>();
+
+    public static class ImportExportJob extends Job<TempFile> {
+        public ImportExportJob(TempFile data, Task<TempFile> task) {
+            super(data, task);
+        }
+
+        private String type;
+        private String format;
+        private String ext;
+
+        public String getType() {
+            return type;
+        }
+        public void setType(String type) {
+            this.type = type;
+        }
+
+        public String getFormat() {
+            return format;
+        }
+        public void setFormat(String format) {
+            this.format = format;
+        }
+
+        public String getExt() {
+            return ext;
+        }
+        public void setExt(String ext) {
+            this.ext = ext;
+        }
+    }
 
     public static class SearchResult {
         public String query;
         public long total = 0;
         public List<Integer> ids = new ArrayList<>();
         public long ms = 0;
+    }
+
+    private static void notifyAll(Map<Integer, WsConnectContext> connections, Map<String, Object> data) throws JsonProcessingException {
+        List<Integer> deleteTargets = new ArrayList<>();
+        String json = mapper.writeValueAsString(data);
+        for (Map.Entry<Integer, WsConnectContext> connection: connections.entrySet()) {
+            if (!connection.getValue().session.isOpen()) {
+                deleteTargets.add(connection.getValue().session.hashCode());
+            } else {
+                connection.getValue().send(json);
+            }
+        }
+        for (Integer target: deleteTargets) {
+            connections.remove(target);
+        }
+    }
+
+    private static void notifyAll(Map<Integer, WsConnectContext> connections, Function<WsConnectContext, Map<String, String>> generator) throws JsonProcessingException {
+        List<Integer> deleteTargets = new ArrayList<>();
+        for (Map.Entry<Integer, WsConnectContext> connection: connections.entrySet()) {
+            if (!connection.getValue().session.isOpen()) {
+                deleteTargets.add(connection.getValue().session.hashCode());
+            } else {
+                Map<String, String> data = generator.apply(connection.getValue());
+                String json = mapper.writeValueAsString(data);
+                connection.getValue().send(json);
+            }
+        }
+        for (Integer target: deleteTargets) {
+            connections.remove(target);
+        }
     }
 
     static {
@@ -107,18 +177,12 @@ public class Main
             watcher = new SyslogReceiver(Settings.getSyslogPort(), lucene);
             watcher.addEventListener(doc -> {
                 try {
-                    List<Integer> deleteTargets = new ArrayList<>();
-                    for (Map.Entry<Integer, WsConnectContext> connection: connections.entrySet()) {
-                        String json = mapper.writeValueAsString(SyslogReceiver.toMap(doc, getZoneOffset(connection.getValue().cookieMap())));
-                        if (!connection.getValue().session.isOpen()) {
-                            deleteTargets.add(connection.getValue().session.hashCode());
-                        } else {
-                            connection.getValue().send(json);
-                        }
-                    }
-                    for (Integer target: deleteTargets) {
-                        connections.remove(target);
-                    }
+                    notifyAll(realtimeConnections, ctx -> 
+                        SyslogReceiver.toMap(
+                            doc,
+                            getZoneOffset(ctx.cookieMap())
+                        )
+                    );
                 } catch (Exception e) {
                     logger.atError().log("ws send error.", e);
                 }
@@ -173,12 +237,18 @@ public class Main
             "/api/documents", Main::documents
         ).get(
             "/api/group/count", Main::groupCount
-        ).get(
-            "/api/export/sqlite", Main::sqlite
-        ).get(
+        ).post(
+            "/api/export/sqlite", Main::exportSqlite
+        ).post(
             "/api/export/tsv", Main::exportTsv
+        ).get(
+            "/api/download", Main::download
         ).post(
             "/api/import/tsv", Main::importTsv
+        ).get(
+            "/api/task", Main::getTasks
+        ).delete(
+            "/api/task", Main::removeTask
         ).before(
             ctx -> ctx.attribute("start", new Date().getTime())
         ).after(
@@ -193,16 +263,29 @@ public class Main
             ctx.status(HttpStatus.INTERNAL_SERVER_ERROR).json(e);
         }).ws("/ws/realtime", ws -> {
             ws.onConnect(ctx -> {
-                logger.atInfo().addKeyValue("addr", ctx.host()).log("ws connected.");
+                logger.atInfo().addKeyValue("addr", ctx.host()).log("realtime ws connected.");
                 ctx.enableAutomaticPings();
-                connections.put(ctx.session.hashCode(), ctx);
+                realtimeConnections.put(ctx.session.hashCode(), ctx);
             });
             ws.onClose(ctx -> {
-                logger.atInfo().addKeyValue("addr", ctx.host()).log("ws closed.");
-                connections.remove(ctx.session.hashCode());
+                logger.atInfo().addKeyValue("addr", ctx.host()).log("realtime ws closed.");
+                realtimeConnections.remove(ctx.session.hashCode());
             });
             ws.onError(ctx -> {
-                logger.atError().addKeyValue("addr", ctx.host()).log("ws error.");
+                logger.atError().addKeyValue("addr", ctx.host()).log("realtime ws error.");
+            });
+        }).ws("/ws/task", ws -> {
+            ws.onConnect(ctx -> {
+                logger.atInfo().addKeyValue("addr", ctx.host()).log("task ws connected.");
+                ctx.enableAutomaticPings();
+                taskConnections.put(ctx.session.hashCode(), ctx);
+            });
+            ws.onClose(ctx -> {
+                logger.atInfo().addKeyValue("addr", ctx.host()).log("task ws closed.");
+                taskConnections.remove(ctx.session.hashCode());
+            });
+            ws.onError(ctx -> {
+                logger.atError().addKeyValue("addr", ctx.host()).log("task ws error.");
             });
         });
         server.start(Settings.getWebPort());
@@ -217,7 +300,7 @@ public class Main
                 LuceneFieldKeys.message.name(),
                 result.query,
                 new Sort(new SortedNumericSortField(
-                    LuceneFieldKeys.order.name(),
+                    LuceneFieldKeys.sort.name(),
                     SortField.Type.LONG,
                     true
                 )),
@@ -262,7 +345,7 @@ public class Main
                         LuceneFieldKeys.message.name(),
                         "*:*",
                         new Sort(new SortedNumericSortField(
-                            LuceneFieldKeys.order.name(),
+                            LuceneFieldKeys.sort.name(),
                             SortField.Type.LONG,
                             false
                         )),
@@ -383,26 +466,30 @@ public class Main
     }
 
     private static void exportTsv(Context ctx) throws IOException, ClassNotFoundException, SQLException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException, ParseException, QueryNodeException {
+        TempFile temp = new TempFile("logucene_", ".csv");
+        ZoneOffset offset = getZoneOffset(ctx.cookieMap());
         SearchResult hits = search(ctx.queryParam("query"), getZoneOffset(ctx.cookieMap()));
-        PipedInputStream pin = new PipedInputStream();
-        new Thread(() -> {
+
+        ImportExportJob job = new ImportExportJob(temp, (file, progress) -> {
             try (
-                PrintWriter writer = new PrintWriter(new GZIPOutputStream(new PipedOutputStream(pin)));
+                PrintWriter writer = new PrintWriter(new FileOutputStream(temp));
                 LuceneReader reader = lucene.getReader();
             ) {
                 Function<List<String>, String> format = row -> row.stream().map(
-                    cell -> cell.replace("\r", "\\r")
+                    cell -> cell.replace("\r", "\r")
                 ).map(
-                    cell -> cell.replace("\n", "\\n")
+                    cell -> cell.replace("\n", "\n")
                 ).map(
-                    cell -> cell.replace("\t", "\\t")
+                    cell -> cell.replace("\t", "\t")
                 ).collect(
                     Collectors.joining("\t")
                 );
                 List<String> header = new ArrayList<>();
-                for (int id: hits.ids) {
+                for (int count = 0; count < hits.ids.size(); count++) {
+                    progress.accept(new Progress(hits.total, count + 1));
+                    int id = hits.ids.get(count);
+                    Map<String, String> doc = SyslogReceiver.toMap(reader.get(id), offset);
                     List<String> line = new ArrayList<>();
-                    Map<String, String> doc = SyslogReceiver.toMap(reader.get(id), getZoneOffset(ctx.cookieMap()));
                     if (header.size() == 0) {
                         for (String key: doc.keySet()) {
                             header.add(key);
@@ -414,150 +501,285 @@ public class Main
                     }
                     writer.println(format.apply(line));
                 }
-            } catch (Exception e) {
-                throw new RuntimeException(e);
             }
+        });
+
+        job.setType("export");
+        job.setFormat("tsv");
+        job.setExt("tsv");
+
+        job.onUpdate((progress) -> {
+            try {
+                notifyAll(taskConnections, payload(job, offset));
+            } catch (JsonProcessingException e) {
+                // TODO Auto-generated catch block
+                e.printStackTrace();
+            }
+        });
+
+        jobs.put(job.hashCode(), job);
+        job.start();
+    }
+
+    private static void importTsv(Context ctx) throws IOException, NumberFormatException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException {
+        int chunk = Integer.getInteger("lucene.migration.chunk", 1000);
+        ZoneOffset offset = getZoneOffset(ctx.cookieMap());
+        Map<TempFile, Long> files = new HashMap<>();
+        for (UploadedFile file: ctx.uploadedFiles()) {
+            TempFile temp = new TempFile("logucene_", file.extension());
+            long count = 0;
+            try (
+                InputStream input = new GZIPInputStream(file.content());
+                BufferedReader reader = new BufferedReader(new InputStreamReader(input));
+                OutputStream output = new GZIPOutputStream(new FileOutputStream(temp));
+                PrintWriter writer = new PrintWriter(output);
+            ) {
+                while (reader.ready()) {
+                    writer.println(reader.readLine());
+                    count++;
+                }
+            }
+            files.put(temp, count);
+        }
+        for (Entry<TempFile, Long> entry: files.entrySet()) {
+            ImportExportJob job = new ImportExportJob(entry.getKey(), (file, progress) -> {
+                try (
+                    InputStream input = new GZIPInputStream(new FileInputStream(file));
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(input));
+                ) {
+                    Map<LuceneFieldKeys, Integer> colum = null;
+                    List<LuceneFieldKeys> targets = Arrays.asList(
+                        LuceneFieldKeys.timestamp,
+                        LuceneFieldKeys.addr,
+                        LuceneFieldKeys.port,
+                        LuceneFieldKeys.raw
+                    );
+                    List<Document> docs = new ArrayList<>();
+                    long count = 0;
+                    while (reader.ready()) {
+                        progress.accept(new Progress(entry.getValue(), ++count));
+                        List<String> line = Arrays.asList(reader.readLine().split("\t")).stream().map(
+                            cell -> cell.replace("\r", "\r")
+                        ).map(
+                            cell -> cell.replace("\n", "\n")
+                        ).map(
+                            cell -> cell.replace("\t", "\t")
+                        ).toList();
+                        if (colum == null) {
+                            colum = new HashMap<>();
+                            for (int i = 0; i < line.size(); i++) {
+                                for (LuceneFieldKeys target: targets) {
+                                    if (target.name().equals(line.get(i))) {
+                                        colum.put(target, i);
+                                    }
+                                }
+                            }
+                        } else {
+                            long timestamp = Long.valueOf(line.get(colum.get(LuceneFieldKeys.timestamp)));
+                            Document doc = SyslogReceiver.parse(
+                                timestamp,
+                                line.get(colum.get(LuceneFieldKeys.addr)),
+                                Integer.valueOf(line.get(colum.get(LuceneFieldKeys.port))),
+                                line.get(colum.get(LuceneFieldKeys.raw))
+                            );
+                            docs.add(doc);
+                            if (docs.size() == chunk) {
+                                lucene.add(docs);
+                                docs.clear();
+                            }
+                        }
+                    }
+                    if (docs.size() > 0) {
+                        lucene.add(docs);
+                    }
+                }
+            });
+
+            job.setType("import");
+            job.setFormat("tsv");
+            job.setExt("tsv");
+
+            job.onUpdate((progress) -> {
+                try {
+                    notifyAll(taskConnections, payload(job, offset));
+                } catch (JsonProcessingException e) {
+                    // TODO Auto-generated catch block
+                    e.printStackTrace();
+                }
+            });
+
+            jobs.put(job.hashCode(), job);
+            job.start();
+        }
+    }
+
+    private static void exportSqlite(Context ctx) throws IOException, ParseException, QueryNodeException {
+        TempFile temp = new TempFile("logucene_", ".sqlite3");
+        ZoneOffset offset = getZoneOffset(ctx.cookieMap());
+        SearchResult hits = search(ctx.queryParam("query"), getZoneOffset(ctx.cookieMap()));
+
+        ImportExportJob job = new ImportExportJob(temp, (file, progress) -> {
+
+            String clazz = Settings.getSqliteAnalyzer();
+            Analyzer analyzer = (Analyzer) Class.forName(clazz).getDeclaredConstructor().newInstance();
+
+            List<String> fields = Arrays.asList(
+                LuceneFieldKeys.values()
+            ).stream().map(
+                field -> field.name()
+            ).toList();
+
+            String ddl = "create virtual table syslog using fts5("
+                        + String.join(", ", fields)
+                        + ", tokens);";
+
+            String dml = "insert into syslog (rowid, "
+                        + String.join(", ", fields)
+                        + ", tokens) values (?, "
+                        + fields.stream().map(field -> "?").collect(Collectors.joining(", "))
+                        + ", ?);";
+
+            Class.forName("org.sqlite.JDBC");
+
+            try (
+                Connection connection = DriverManager.getConnection("jdbc:sqlite:" + file.getAbsolutePath());
+                Statement statement = connection.createStatement();
+            ) {
+                connection.setAutoCommit(false);
+                statement.execute(ddl);
+                try (
+                    LuceneReader reader = lucene.getReader();
+                    PreparedStatement insert = connection.prepareStatement(dml);
+                ) {
+                    for (int count = 0; count < hits.ids.size(); count++) {
+                        progress.accept(new Progress(hits.total, count + 1));
+                        int id = hits.ids.get(count);
+                        Map<String, String> doc = SyslogReceiver.toMap(reader.get(id), offset);
+                        String message = doc.get(LuceneFieldKeys.message.name());
+                        try (
+                            TokenStream tokenizer = analyzer.tokenStream(
+                                LuceneFieldKeys.message.name(),
+                                message
+                            );
+                        ) {
+                            OffsetAttribute position = tokenizer.getAttribute(OffsetAttribute.class);
+                            tokenizer.reset();
+                            String tokens = "";
+                            while (tokenizer.incrementToken()) {
+                                String token = message.substring(position.startOffset(), position.endOffset());
+                                if (!"".equals(token)) {
+                                    tokens = ("".equals(tokens) ? "" : tokens + " ") + token;
+                                }
+                            }
+                            int i = 1;
+                            int j = 0;
+                            insert.setInt(i++, id);
+                            while (j < fields.size()) {
+                                insert.setString(i++, doc.get(fields.get(j++)));
+                            }
+                            insert.setString(i++, tokens);
+                            insert.addBatch();
+                            // TODO: マジックナンバー
+                            if (count % 1000 == 0) {
+                                insert.executeBatch();
+                                insert.clearBatch();
+                            }
+                        }
+                    }
+                    insert.executeBatch();
+                    insert.clearBatch();
+                }
+                connection.commit();
+            }
+        });
+
+        job.setType("export");
+        job.setFormat("sqlite3");
+        job.setExt("sqlite3");
+
+        job.onUpdate((progress) -> {
+            try {
+                notifyAll(taskConnections, payload(job, offset));
+            } catch (JsonProcessingException e) {
+                // TODO Auto-generated catch block
+                e.printStackTrace();
+            }
+        });
+
+        jobs.put(job.hashCode(), job);
+        job.start();
+    }
+
+    private static void download(Context ctx) throws IOException, ClassNotFoundException, SQLException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException, ParseException, QueryNodeException {
+        int id = Integer.valueOf(ctx.queryParam("id"));
+        ImportExportJob job = jobs.get(id);
+        PipedInputStream pin = new PipedInputStream();
+        new Thread(() -> {
+            try (
+                GZIPOutputStream pout = new GZIPOutputStream(new PipedOutputStream(pin));
+                InputStream input = new FileInputStream(job.getData());
+            ) {
+                while (input.available() > 0) {
+                    byte[] buf = input.readNBytes(1024 * 1024);
+                    pout.write(buf);
+                    pout.flush();
+                }
+                pout.finish();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            } 
         }).start();
         ctx.contentType(
             "application/octet-stream"
         ).header(
-            "Content-Disposition", "attachment; filename=\"logucene.tsv.gz\""
+            "Content-Disposition", "attachment; filename=\"logucene." + job.getExt() + ".gz\""
         ).result(
             pin
         );
     }
 
-    private static void importTsv(Context ctx) throws IOException, NumberFormatException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException {
-        int chunk = Integer.getInteger("lucene.migration.chunk", 1000);
-        for (UploadedFile file: ctx.uploadedFiles()) {
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(new GZIPInputStream(file.content())));) {
-                Map<LuceneFieldKeys, Integer> colum = null;
-                List<LuceneFieldKeys> target = Arrays.asList(
-                    LuceneFieldKeys.timestamp,
-                    LuceneFieldKeys.addr,
-                    LuceneFieldKeys.port,
-                    LuceneFieldKeys.raw
-                );
-                List<Document> docs = new ArrayList<>();
-                while (reader.ready()) {
-                    List<String> line = Arrays.asList(reader.readLine().split("\t")).stream().map(
-                        cell -> cell.replace("\\r", "\r")
-                    ).map(
-                        cell -> cell.replace("\\n", "\n")
-                    ).map(
-                        cell -> cell.replace("\\t", "\t")
-                    ).toList();
-                    if (colum == null) {
-                        colum = new HashMap<>();
-                        for (int i = 0; i < line.size(); i++) {
-                            LuceneFieldKeys field = LuceneFieldKeys.valueOf(line.get(i));
-                            if (target.contains(field)) {
-                                colum.put(field, i);
-                            }
-                        }
-                    } else {
-                        long timestamp = Long.valueOf(line.get(colum.get(LuceneFieldKeys.timestamp)));
-                        Document doc = SyslogReceiver.parse(
-                            timestamp,
-                            line.get(colum.get(LuceneFieldKeys.addr)),
-                            Integer.valueOf(line.get(colum.get(LuceneFieldKeys.port))),
-                            line.get(colum.get(LuceneFieldKeys.raw))
-                        );
-                        docs.add(doc);
-                        if (docs.size() == chunk) {
-                            lucene.add(docs);
-                            docs.clear();
-                        }
-                    }
-                }
-                if (docs.size() > 0) {
-                    lucene.add(docs);
-                }
+    private static void getTasks(Context ctx) {
+        ZoneOffset offset = getZoneOffset(ctx.cookieMap());
+        ctx.json(new HashMap<>() {{
+            for (ImportExportJob job: jobs.values()) {
+                this.put(job.hashCode(), payload(job, offset));
             }
-        }
+        }});
     }
 
-    // TODO; 時間が掛かるためジョブまたはCLI
-    private static void sqlite(Context ctx) throws IOException, ClassNotFoundException, SQLException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException, ParseException, QueryNodeException {
-        SearchResult hits = search(ctx.queryParam("query"), getZoneOffset(ctx.cookieMap()));
+    private static void removeTask(Context ctx) throws JsonProcessingException {
+        int id = Integer.valueOf(ctx.queryParam("id"));
+        ImportExportJob job = jobs.get(id);
+        job.getData().delete();
+        jobs.remove(id);
+        notifyAll(taskConnections, new HashMap<>() {{
+            this.put("type", job.getType());
+            this.put("event", "remove");
+            this.put("id", job.hashCode());
+        }});
+    }
 
-        String clazz = Settings.getSqliteAnalyzer();
-        Analyzer analyzer = (Analyzer) Class.forName(clazz).getDeclaredConstructor().newInstance();
-
-        List<String> fields = Arrays.asList(
-            LuceneFieldKeys.values()
-        ).stream().map(
-            field -> field.name()
-        ).toList();
-
-        String ddl = "create virtual table syslog using fts5("
-                     + String.join(", ", fields)
-                     + ", tokens);";
-
-        String dml = "insert into syslog (rowid, "
-                      + String.join(", ", fields)
-                      + ", tokens) values (?, "
-                      + fields.stream().map(field -> "?").collect(Collectors.joining(", "))
-                      + ", ?);";
-
-        Class.forName("org.sqlite.JDBC");
-
-        try (
-            TempFile temp = new TempFile("logucene_", ".sqlite3");
-            Connection connection = DriverManager.getConnection("jdbc:sqlite:" + temp.getAbsolutePath());
-            Statement statement = connection.createStatement();
-        ) {
-            connection.setAutoCommit(false);
-            statement.execute(ddl);
-            try (
-                LuceneReader reader = lucene.getReader();
-                PreparedStatement insert = connection.prepareStatement(dml);
-            ) {
-                for (int count = 0; count < hits.ids.size(); count++) {
-                    int id = hits.ids.get(count);
-                    Map<String, String> doc = SyslogReceiver.toMap(reader.get(id), getZoneOffset(ctx.cookieMap()));
-                    String message = doc.get(LuceneFieldKeys.message.name());
-                    try (
-                        TokenStream tokenizer = analyzer.tokenStream(
-                            LuceneFieldKeys.message.name(),
-                            message
-                        );
-                    ) {
-                        OffsetAttribute offset = tokenizer.getAttribute(OffsetAttribute.class);
-                        tokenizer.reset();
-                        String tokens = "";
-                        while (tokenizer.incrementToken()) {
-                            String token = message.substring(offset.startOffset(), offset.endOffset());
-                            if (!"".equals(token)) {
-                                tokens = ("".equals(tokens) ? "" : tokens + " ") + token;
-                            }
-                        }
-                        int i = 1;
-                        int j = 0;
-                        insert.setInt(i++, id);
-                        while (j < fields.size()) {
-                            insert.setString(i++, doc.get(fields.get(j++)));
-                        }
-                        insert.setString(i++, tokens);
-                        insert.addBatch();
-                        // TODO: マジックナンバー
-                        if (count % 1000 == 0) {
-                            insert.executeBatch();
-                            insert.clearBatch();
-                        }
-                    }
-                }
-                insert.executeBatch();
-                insert.clearBatch();
+    private static Map<String, Object> payload(ImportExportJob job, ZoneOffset offset) {
+        Function<Long, String> convert = (timestamp) -> {
+            if (timestamp != null) {
+                return OffsetDateTime
+                    .ofInstant(new Date(timestamp).toInstant(), offset)
+                    .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+            } else {
+                return null;
             }
-            connection.commit();
-            ctx.contentType(
-                "application/octet-stream"
-            ).header(
-                "Content-Disposition", "attachment; filename=\"logucene.sqlite3.gz\""
-            ).result(
-                new GzipCompressInputStream(new FileInputStream(temp))
-            );
-        }
+        };
+        return new HashMap<>() {{
+            this.put("type", job.getType());
+            this.put("event", job.getProgress().event.name());
+            this.put("id", job.hashCode());
+            this.put("start", convert.apply(job.getStartTime()));
+            this.put("finish", convert.apply(job.getFinishTime()));
+            this.put("format", job.getFormat());
+            this.put("progress", job.getProgress());
+            if (job.getError() != null) {
+                this.put("error", job.getError().getMessage());
+            }
+        }};
     }
 }

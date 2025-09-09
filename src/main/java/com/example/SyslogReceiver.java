@@ -9,7 +9,6 @@ import java.nio.ByteBuffer;
 import java.text.DecimalFormat;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
-import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -75,7 +74,7 @@ public class SyslogReceiver implements Runnable {
     }
 
     public static enum LuceneFieldKeys {
-        order(LongField.class, long.class),
+        sort(LongField.class, long.class),
         timestamp(LongPoint.class, long[].class),
         host(StringField.class, String.class),
         addr(StringField.class, String.class),
@@ -233,7 +232,7 @@ public class SyslogReceiver implements Runnable {
             Document doc = new Document();
             try {
                 doc.add(LuceneFieldKeys.raw.field(message));
-                doc.add(LuceneFieldKeys.order.field(timestamp));
+                doc.add(LuceneFieldKeys.sort.field(timestamp));
                 doc.add(LuceneFieldKeys.timestamp.field(timestamp));
                 doc.add(LuceneFieldKeys.addr.field(addr));
                 doc.add(LuceneFieldKeys.port.field(port));
@@ -263,7 +262,7 @@ public class SyslogReceiver implements Runnable {
             return doc;
         } finally {
             // TODO: 処理を共通化
-            doc.add(new SortedNumericDocValuesField(LuceneFieldKeys.order.name(), timestamp));
+            doc.add(new SortedNumericDocValuesField(LuceneFieldKeys.sort.name(), timestamp));
             doc.add(new StoredField(LuceneFieldKeys.timestamp.name(), timestamp));
             doc.add(new SortedDocValuesField(LuceneFieldKeys.timestamp.name(), new BytesRef(ByteBuffer.allocate(8).putLong(timestamp).array())));
             doc.add(new StoredField(LuceneFieldKeys.port.name(), port));
@@ -275,10 +274,11 @@ public class SyslogReceiver implements Runnable {
     }
 
     public static Map<String, String> toMap(Document doc, ZoneOffset offset) {
-        OffsetDateTime timestamp = LocalDateTime.ofInstant(new Date(Long.valueOf(doc.get(LuceneFieldKeys.timestamp.name()))).toInstant(), ZoneId.of("UTC")).atOffset(ZoneOffset.UTC).withOffsetSameInstant(offset);
+        long timestamp = Long.valueOf(doc.get(LuceneFieldKeys.timestamp.name()));
+        OffsetDateTime datetime = OffsetDateTime.ofInstant(new Date(timestamp).toInstant(), offset);
         return new HashMap<>() {{
-            this.put("day", timestamp.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
-            this.put("time", timestamp.format(DateTimeFormatter.ofPattern("HH:mm:ss")));
+            this.put("day", datetime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
+            this.put("time", datetime.format(DateTimeFormatter.ofPattern("HH:mm:ss")));
             for (LuceneFieldKeys field: LuceneFieldKeys.values()) {
                 this.put(field.name(), doc.get(field.name()));
             }
@@ -295,7 +295,7 @@ public class SyslogReceiver implements Runnable {
                 LuceneFieldKeys.message.name(),
                 "*:*",
                 new Sort(new SortedNumericSortField(
-                    LuceneFieldKeys.order.name(),
+                    LuceneFieldKeys.sort.name(),
                     SortField.Type.LONG,
                     true
                 )),

@@ -80,42 +80,42 @@
           <Toast position="bottom-right" />
           <div style="display: flex; justify-content: space-between;">
             <div style="display: flex; align-items: center; width: 80px; justify-content: space-evenly;">
-              <i class="pi pi-bolt" :style="{'font-size': '1.5rem', 'color': realtime ? '#10b981' : '#cbd5e1'}"></i>
-              <ToggleSwitch v-tooltip.bottom="'RealTime'" v-model="realtime" @change="switchRealTimeMode" />
+              <i class="pi pi-bolt" :style="{'font-size': '1.5rem', 'color': realtime.enable ? '#10b981' : '#cbd5e1'}"></i>
+              <ToggleSwitch v-tooltip.bottom="'RealTime'" v-model="realtime.enable" @change="switchRealTimeMode" />
             </div>
             <div style="display: flex; width: calc(100% - 100px);">
               <IftaLabel>
-                <DatePicker ref="datePicker" v-model="condition.day" :minDate="config.day.min" :maxDate="config.day.max" inputId="day" :disabled="realtime" showIcon selectionMode="range" :manualInput="false" @update:modelValue="dateSelect" :inputStyle="{'width': '210px'}" />
+                <DatePicker ref="datePicker" v-model="condition.day" :minDate="config.day.min" :maxDate="config.day.max" inputId="day" :disabled="realtime.enable" showIcon selectionMode="range" :manualInput="false" @update:modelValue="dateSelect" :inputStyle="{'width': '210px'}" />
                 <label for="day">Day</label>
               </IftaLabel>
               <IftaLabel>
-                <MultiSelect v-model="condition.host" inputId="host" :disabled="realtime" :options="config.host" style="width: 150px;" filter :maxSelectedLabels="1" @update:modelValue="search" />
+                <MultiSelect v-model="condition.host" inputId="host" :disabled="realtime.enable" :options="config.host" style="width: 150px;" filter :maxSelectedLabels="1" @update:modelValue="search" />
                 <label for="host">Host</label>
               </IftaLabel>
               <IftaLabel>
-                <MultiSelect v-model="condition.facility" inputId="facility" :disabled="realtime" :options="config.facility" style="width: 150px;" filter :maxSelectedLabels="1" @update:modelValue="search" />
+                <MultiSelect v-model="condition.facility" inputId="facility" :disabled="realtime.enable" :options="config.facility" style="width: 150px;" filter :maxSelectedLabels="1" @update:modelValue="search" />
                 <label for="facility">Facility</label>
               </IftaLabel>
               <IftaLabel>
-                <MultiSelect v-model="condition.severity" inputId="severity" :disabled="realtime" :options="config.severity" style="width: 150px;" filter :maxSelectedLabels="1" @update:modelValue="search" />
+                <MultiSelect v-model="condition.severity" inputId="severity" :disabled="realtime.enable" :options="config.severity" style="width: 150px;" filter :maxSelectedLabels="1" @update:modelValue="search" />
                 <label for="severity">Severity</label>
               </IftaLabel>
               <IftaLabel style="width: calc(100% - 860px);">
-                <InputText type="text" v-model="condition.query" inputId="query" :disabled="realtime" style="width: 100%;" @keydown="$event.key == 'Enter' && search()" />
+                <InputText type="text" v-model="condition.query" inputId="query" :disabled="realtime.enable" style="width: 100%;" @keydown="$event.key == 'Enter' && search()" />
                 <label for="query">Query</label>
               </IftaLabel>
-              <Button v-tooltip.bottom="'Search'" severity="success" icon="pi pi-search" :disabled="realtime" @click="search" />
-              <Button v-tooltip.bottom="'Download'" severity="info" icon="pi pi-download" :disabled="realtime" @click="download" />
-              <Button v-tooltip.bottom="'Upload'" severity="danger" icon="pi pi-upload" :disabled="realtime" @click="showUploadDialog = true" />
-              <Button v-tooltip.bottom="'Clear Filter'" severity="warn" icon="pi pi-filter-slash" :disabled="realtime" @click="clearFilter" />
-              <Button severity="help" icon="pi pi-cog" @click="showConfigDialog = true" />
+              <Button v-tooltip.bottom="'Search'" severity="success" icon="pi pi-search" :disabled="realtime.enable" @click="search" />
+              <Button v-tooltip.bottom="'Download'" severity="info" icon="pi pi-download" :disabled="realtime.enable" @click="showDownloadDialog" />
+              <Button v-tooltip.bottom="'Upload'" severity="danger" icon="pi pi-upload" :disabled="realtime.enable" @click="showUploadDialog" />
+              <Button v-tooltip.bottom="'Clear Filter'" severity="warn" icon="pi pi-filter-slash" :disabled="realtime.enable" @click="clearFilter" />
+              <Button severity="help" icon="pi pi-cog" @click="showConfigDialog" />
             </div>
           </div>
           <Splitter style="height: calc(100% - 58px);">
             <SplitterPanel :size="20" :minSize="10">
               <Tree
                 :value="tree.value"
-                :loading="realtime"
+                :loading="realtime.enable"
                 v-model:selectionKeys="tree.selectedKeys"
                 selectionMode="single"
                 style="height: 100%; overflow: auto;"
@@ -183,7 +183,7 @@
               </Tabs>
             </SplitterPanel>
           </Splitter>
-          <Dialog v-model:visible="showConfigDialog" modal header="Config">
+          <Dialog v-model:visible="dialog.config.show" modal header="Config">
             <div style="display: flex; width: 1000px; justify-content: space-around;">
               <div>
                 <h3>Tree</h3>
@@ -215,9 +215,63 @@
               </div>
             </div>
           </Dialog>
-          <Dialog v-model:visible="showUploadDialog" modal header="Upload">
-            <FileUpload ref="uploadfile" mode="basic" name="tsv" url="/api/import/tsv" />
+          <Dialog v-model:visible="dialog.download.show" modal header="Download">
+            <DataTable :value="Object.values(tasks.list).filter(task => task.type == 'export').sort((a, b) => a.start < b.start ? -1 : a.start > b.start ? 1 : 0)">
+              <Column field="start" header="Start" style="width: 180px;"></Column>
+              <Column field="finish" header="Finish" style="width: 180px;"></Column>
+              <Column field="format" header="Format" style="width: 80px;"></Column>
+              <Column header="Progress" style="width: 200px;">
+                <template #body="slotProps">
+                  <progress :max="slotProps.data.progress.max" :value="slotProps.data.progress.current"></progress>
+                </template>
+              </Column>
+              <Column header="Detail" style="width: 180px;">
+                <template #body="slotProps">
+                  {{ slotProps.data.error ? slotProps.data.error : '' }}
+                </template>
+              </Column>
+              <Column header="Operation" style="width: 270px;">
+                <template #body="slotProps">
+                  <div style="display: flex; gap: 0.5rem;">
+                    <Button label="Download" icon="pi pi-download" severity="info" :disabled="!slotProps.data.finish || slotProps.data.error" @click="download(slotProps.data.id)" severity="secondary" />
+                    <Button label="Remove" icon="pi pi-trash" severity="danger" :disabled="!slotProps.data.finish" @click="removeTask(slotProps.data.id)" severity="secondary" />
+                  </div>
+                </template>
+              </Column>
+              <template #empty> no data. </template>
+            </DataTable>
             <template #footer>
+              <Button label="SQLite" icon="pi pi-database" @click="startExportTask('sqlite')" severity="secondary" />
+              <Button label="TSV" icon="pi pi-file" @click="startExportTask('tsv')" severity="secondary" />
+            </template>
+          </Dialog>
+          <Dialog v-model:visible="dialog.upload.show" modal header="Upload">
+            <DataTable :value="Object.values(tasks.list).filter(task => task.type == 'import').sort((a, b) => a.start < b.start ? -1 : a.start > b.start ? 1 : 0)">
+              <Column field="start" header="Start" style="width: 180px;"></Column>
+              <Column field="finish" header="Finish" style="width: 180px;"></Column>
+              <Column field="format" header="Format" style="width: 80px;"></Column>
+              <Column header="Progress" style="width: 200px;">
+                <template #body="slotProps">
+                  <progress :max="slotProps.data.progress.max" :value="slotProps.data.progress.current"></progress>
+                </template>
+              </Column>
+              <Column header="Detail" style="width: 180px;">
+                <template #body="slotProps">
+                  {{ slotProps.data.error ? slotProps.data.error : '' }}
+                </template>
+              </Column>
+              <Column header="Operation" style="width: 270px;">
+                <template #body="slotProps">
+                  <div style="display: flex; gap: 0.5rem;">
+                    <Button label="Download" icon="pi pi-download" severity="info" :disabled="!slotProps.data.finish || slotProps.data.error" @click="download(slotProps.data.id)" severity="secondary" />
+                    <Button label="Remove" icon="pi pi-trash" severity="danger" :disabled="!slotProps.data.finish" @click="removeTask(slotProps.data.id)" severity="secondary" />
+                  </div>
+                </template>
+              </Column>
+              <template #empty> no data. </template>
+            </DataTable>
+            <template #footer>
+              <FileUpload ref="uploadfile" mode="basic" name="tsv" :multiple="true" url="/api/import/tsv" />
               <Button label="Upload" @click="upload" severity="secondary" />
             </template>
           </Dialog>
@@ -228,10 +282,19 @@
             http: axios.create(),
             blocked: false,
             toast: useToast(),
-            showConfigDialog: false,
-            showUploadDialog: false,
-            socket: null,
-            realtime: false,
+            dialog: {
+              config: {show: false},
+              download: {show: false},
+              upload: {show: false},
+            },
+            tasks: {
+              list: {},
+              socket: null
+            },
+            realtime: {
+              socket: null,
+              enable: false,
+            },
             tab: 'table',
             config: {
               day: {min: new Date(), max: new Date()},
@@ -258,7 +321,7 @@
               ], [
                 // {name: 'id'},
                 {name: 'timestamp'},
-                {name: 'order'},
+                {name: 'sort'},
                 {name: 'format'},
                 {name: 'addr'},
                 {name: 'port'},
@@ -390,18 +453,37 @@
             });
           });
 
+          this.$data.tasks.socket = new WebSocket("/ws/task");
+          this.$data.tasks.socket.addEventListener("message", event => {
+            var message = JSON.parse(event.data);
+            if (message.event == 'remove') {
+              this.$data.tasks.list = Object.values(
+                this.$data.tasks.list
+              ).filter(
+                task => task.id != message.id
+              ).reduce(
+                (tasks, task) => {
+                  tasks[task.id] = task;
+                  return tasks;
+                }, {}
+              );
+            } else {
+              this.$data.tasks.list[message.id] = message;
+            }
+          });
+
           var config = PrimeVue.usePrimeVue().config;
           console.debug(config);
 
           this.$data.http.get(
             '/api/config'
           ).then(response => {
-            this.$data.config.host     = response.data.host;
-            this.$data.config.facility = response.data.facility;
-            this.$data.config.severity = response.data.severity;
-            this.$data.config.day.min  = new Date(response.data.day.min);
-            this.$data.config.day.max  = new Date(response.data.day.max);
-            this.$data.condition.day   = [this.$data.config.day.min, this.$data.config.day.max];
+            this.$data.config.host        = response.data.host;
+            this.$data.config.facility    = response.data.facility;
+            this.$data.config.severity    = response.data.severity;
+            this.$data.config.day.min     = new Date(response.data.day.min);
+            this.$data.config.day.max     = new Date(response.data.day.max);
+            this.$data.condition.day      = [this.$data.config.day.min, this.$data.config.day.max];
             config.locale.dateFormat      = 'yy-mm-dd';
             config.locale.dayNames        = response.data.dayNames;
             config.locale.dayNamesMin     = response.data.dayNamesMin;
@@ -419,6 +501,27 @@
           });
         },
         methods: {
+          showConfigDialog: function() {
+            this.$data.dialog.config.show = true;
+          },
+          showDownloadDialog: function() {
+            this.$data.http.get(
+              '/api/task'
+            ).then(
+              response => this.$data.tasks.list = response.data
+            ).then(
+              () => this.$data.dialog.download.show = true
+            );
+          },
+          showUploadDialog: function() {
+            this.$data.http.get(
+              '/api/task'
+            ).then(
+              response => this.$data.tasks.list = response.data
+            ).then(
+              () => this.$data.dialog.upload.show = true
+            );
+          },
           treeSelect: function(node) {
             this.$data.tree.selected = node;
             if (this.$data.tab == 'table') {
@@ -565,11 +668,17 @@
               });
             });
           },
-          download: function() {
+          startExportTask: function(format) {
+            this.$data.http.post(`/api/export/${format}?query=${encodeURIComponent(this.getQuery())}`);
+          },
+          download: function(id) {
             var a = document.createElement('a');
             a.target = '_blank';
-            a.href = `/api/export/sqlite?query=${encodeURIComponent(this.getQuery())}`;
+            a.href = `/api/download?id=${id}`;
             a.click();
+          },
+          removeTask: function(id) {
+            this.$data.http.delete(`/api/task?id=${id}`);
           },
           upload: function() {
             this.$refs.uploadfile.upload();
@@ -590,16 +699,16 @@
               leaf: true
             }];
             this.showChart();
-            if (this.$data.realtime) {
-              this.$data.socket = new WebSocket("/ws/realtime");
-              this.$data.socket.addEventListener("message", event => {
+            if (this.$data.realtime.enable) {
+              this.$data.realtime.socket = new WebSocket("/ws/realtime");
+              this.$data.realtime.socket.addEventListener("message", event => {
                 this.$data.table.logs = [JSON.parse(event.data)].concat(this.$data.table.logs);
                 this.$data.tree.value[0].data.count++;
                 this.showChart();
               });
             } else {
-              this.$data.socket.close();
-              this.$data.socket = null;
+              this.$data.realtime.socket.close();
+              this.$data.realtime.socket = null;
               this.search();
             }
           },
@@ -613,7 +722,7 @@
             this.showChart();
           },
           changeDrilldown: function() {
-            if (!this.$data.realtime) {
+            if (!this.$data.realtime.enable) {
               this.$data.tree.selected = null;
               this.$data.tree.selectedKeys = [];
               this.search();
@@ -623,7 +732,7 @@
             if (this.$data.tab == 'barchart') {
               var yaxis = this.$data.axis[this.$data.barchart.yaxis];
               var xaxis = this.$data.axis[this.$data.barchart.xaxis];
-              var promise = (this.$data.realtime
+              var promise = (this.$data.realtime.enable
                 ? Promise.resolve().then(() => {
                     var result = {
                       yaxis: yaxis.collect(this.$data.table.logs.map(row => row[this.$data.barchart.yaxis])),
@@ -677,7 +786,7 @@
                 if (!this.$data.barchart.instance) {
                   this.$data.barchart.instance = barchart;
                   barchart.on('dblclick', (event) => {
-                    if (!this.$data.realtime) {
+                    if (!this.$data.realtime.enable) {
                       this.$data.condition.query = `(${this.$data.condition.query?.trim() || '*:*'}) `
                         + `AND ${yaxis.query(event.name)} `
                         + `AND ${xaxis.query(event.seriesName)}`;
