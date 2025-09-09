@@ -522,6 +522,7 @@ public class Main
     }
 
     private static void importTsv(Context ctx) throws IOException, NumberFormatException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException {
+        // TODO: upsert
         int chunk = Integer.getInteger("lucene.migration.chunk", 1000);
         ZoneOffset offset = getZoneOffset(ctx.cookieMap());
         Map<TempFile, Long> files = new HashMap<>();
@@ -558,6 +559,7 @@ public class Main
                     long count = 0;
                     while (reader.ready()) {
                         progress.accept(new Progress(entry.getValue(), ++count));
+                        // TODO: 登録の時点でエスケープする、"\\\\"が漏れている
                         List<String> line = Arrays.asList(reader.readLine().split("\t")).stream().map(
                             cell -> cell.replace("\r", "\r")
                         ).map(
