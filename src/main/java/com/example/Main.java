@@ -1,12 +1,14 @@
 package com.example;
 
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.io.OutputStreamWriter;
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
 import java.io.PrintWriter;
@@ -57,6 +59,7 @@ import org.slf4j.LoggerFactory;
 
 import com.example.Job.Progress;
 import com.example.LuceneManager.LuceneReader;
+import com.example.LuceneManager.LuceneTransaction;
 import com.example.SyslogParser.Facility;
 import com.example.SyslogParser.Severity;
 import com.example.SyslogReceiver.LuceneFieldKeys;
@@ -525,7 +528,7 @@ public class Main
                 InputStream input = new GZIPInputStream(file.content());
                 BufferedReader reader = new BufferedReader(new InputStreamReader(input));
                 OutputStream output = new GZIPOutputStream(new FileOutputStream(temp));
-                PrintWriter writer = new PrintWriter(output);
+                PrintWriter writer = new PrintWriter(new BufferedWriter(new OutputStreamWriter(output)));
             ) {
                 while (reader.ready()) {
                     writer.println(reader.readLine());
@@ -539,6 +542,7 @@ public class Main
                 try (
                     InputStream input = new GZIPInputStream(new FileInputStream(file));
                     BufferedReader reader = new BufferedReader(new InputStreamReader(input));
+                    LuceneTransaction tran = lucene.beginTransaction();
                 ) {
                     Map<LuceneFieldKeys, Integer> colum = null;
                     List<LuceneFieldKeys> targets = Arrays.asList(
@@ -571,14 +575,15 @@ public class Main
                             );
                             docs.add(doc);
                             if (docs.size() == chunk) {
-                                lucene.add(docs);
+                                tran.add(docs);
                                 docs.clear();
                             }
                         }
                     }
                     if (docs.size() > 0) {
-                        lucene.add(docs);
+                        tran.add(docs);
                     }
+                    tran.commit();
                 }
             });
 

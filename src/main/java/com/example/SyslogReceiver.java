@@ -45,6 +45,7 @@ import org.slf4j.LoggerFactory;
 import org.slf4j.spi.LoggingEventBuilder;
 
 import com.example.LuceneManager.LuceneReader;
+import com.example.LuceneManager.LuceneTransaction;
 import com.example.SyslogParser.Facility;
 import com.example.SyslogParser.Rfc3164;
 import com.example.SyslogParser.Severity;
@@ -294,6 +295,7 @@ public class SyslogReceiver implements Runnable {
             LuceneManager src = new LuceneManager(System.getProperty("lucene.migration.src", "index"));
             LuceneManager dst = new LuceneManager(System.getProperty("lucene.migration.dst", "migrated"));
             LuceneReader reader = src.getReader();
+            LuceneTransaction tran = dst.beginTransaction();
         ) {
             TopDocs hits = reader.search(
                 LuceneFieldKeys.message.name(),
@@ -318,13 +320,14 @@ public class SyslogReceiver implements Runnable {
                 );
                 docs.add(dstDoc);
                 if (docs.size() == chunk) {
-                    dst.add(docs);
+                    tran.add(docs);
                     docs.clear();
                 }
             }
             if (docs.size() > 0) {
-                dst.add(docs);
+                tran.add(docs);
             }
+            tran.commit();
         }
     }
     
