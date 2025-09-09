@@ -541,7 +541,6 @@ public class Main
                 try (
                     InputStream input = new GZIPInputStream(new FileInputStream(file));
                     BufferedReader reader = new BufferedReader(new InputStreamReader(input));
-                    LuceneTransaction tran = lucene.beginTransaction();
                 ) {
                     Map<LuceneFieldKeys, Integer> colum = null;
                     List<LuceneFieldKeys> targets = Arrays.asList(
@@ -574,15 +573,14 @@ public class Main
                             );
                             docs.add(doc);
                             if (docs.size() == chunk) {
-                                tran.add(docs);
+                                lucene.add(docs);
                                 docs.clear();
                             }
                         }
                     }
                     if (docs.size() > 0) {
-                        tran.add(docs);
+                        lucene.add(docs);
                     }
-                    tran.commit();
                 }
             });
 
