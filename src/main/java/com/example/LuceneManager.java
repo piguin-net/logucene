@@ -99,37 +99,6 @@ public class LuceneManager implements Closeable {
         }
     }
 
-    public static class LuceneTransaction implements Closeable {
-        private final IndexWriter writer;
-
-        public LuceneTransaction(IndexWriter writer) {
-            this.writer = writer;
-        }
-
-        public void add(Document doc) throws IOException {
-            this.writer.addDocument(doc);
-            this.writer.flush();
-        }
-
-        public void add(List<Document> docs) throws IOException {
-            this.writer.addDocuments(docs);
-            this.writer.flush();
-        }
-
-        public long commit() throws IOException {
-            return this.writer.commit();
-        }
-
-        public void rollback() throws IOException {
-            this.writer.rollback();
-        }
-
-        @Override
-        public void close() throws IOException {
-            this.writer.rollback();
-        }
-    }
-
     public LuceneManager(String path) throws IOException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException, ClassNotFoundException {
         this(path, new ArrayList<>());
     }
@@ -166,17 +135,13 @@ public class LuceneManager implements Closeable {
         this.writer = new IndexWriter(dir, iwc);
     }
 
-    public LuceneTransaction beginTransaction() {
-        return new LuceneTransaction(this.writer);
-    }
-
     public void add(Document doc) throws IOException {
         this.writer.addDocument(doc);
         this.writer.flush();
         this.writer.commit();
     }
 
-    public void add(List<Document> docs) throws IOException {
+    public void add(Iterable<Document> docs) throws IOException {
         this.writer.addDocuments(docs);
         this.writer.flush();
         this.writer.commit();

@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -517,7 +518,6 @@ public class Main
 
     private static void importTsv(Context ctx) throws IOException, NumberFormatException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException {
         // TODO: upsert
-        int chunk = Integer.getInteger("lucene.migration.chunk", 1000);
         ZoneOffset offset = getZoneOffset(ctx.cookieMap());
         Map<TempFile, Long> files = new HashMap<>();
         for (UploadedFile file: ctx.uploadedFiles()) {
@@ -538,50 +538,83 @@ public class Main
         }
         for (Entry<TempFile, Long> entry: files.entrySet()) {
             ImportExportJob job = new ImportExportJob(entry.getKey(), (file, progress) -> {
-                try (
-                    InputStream input = new GZIPInputStream(new FileInputStream(file));
-                    BufferedReader reader = new BufferedReader(new InputStreamReader(input));
-                ) {
-                    Map<LuceneFieldKeys, Integer> colum = null;
-                    List<LuceneFieldKeys> targets = Arrays.asList(
-                        LuceneFieldKeys.timestamp,
-                        LuceneFieldKeys.addr,
-                        LuceneFieldKeys.port,
-                        LuceneFieldKeys.raw
-                    );
-                    List<Document> docs = new ArrayList<>();
-                    long count = 0;
-                    while (reader.ready()) {
-                        progress.accept(new Progress(entry.getValue(), ++count));
-                        List<String> line = Arrays.asList(reader.readLine().split("\t"));
-                        if (colum == null) {
-                            colum = new HashMap<>();
-                            for (int i = 0; i < line.size(); i++) {
-                                for (LuceneFieldKeys target: targets) {
-                                    if (target.name().equals(line.get(i))) {
-                                        colum.put(target, i);
+                Iterable<Document> docs = new Iterable<Document>() {
+                    @Override
+                    public Iterator<Document> iterator() {
+                        try {
+                            return new Iterator<>() {
+                                long count = 1;
+                                // TODO: キレイにcloseする方法
+                                @SuppressWarnings("resource")
+                                BufferedReader reader = new BufferedReader(
+                                    new InputStreamReader(
+                                        new GZIPInputStream(
+                                            new FileInputStream(file)
+                                        )
+                                    )
+                                );
+                                List<LuceneFieldKeys> fields = Arrays.asList(
+                                    LuceneFieldKeys.timestamp,
+                                    LuceneFieldKeys.addr,
+                                    LuceneFieldKeys.port,
+                                    LuceneFieldKeys.raw
+                                );
+                                Map<LuceneFieldKeys, Integer> colum = new HashMap<>() {{
+                                    if (hasNext()) {
+                                        List<String> line = Arrays.asList(reader.readLine().split("\t"));
+                                        for (int i = 0; i < line.size(); i++) {
+                                            for (LuceneFieldKeys field: fields) {
+                                                if (field.name().equals(line.get(i))) {
+                                                    this.put(field, i);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }};
+                                @Override
+                                public boolean hasNext() {
+                                    try {
+                                        boolean ready = reader.ready();
+                                        if (!ready) {
+                                            close();
+                                        }
+                                        return ready;
+                                    } catch (Exception e) {
+                                        close();
+                                        throw new RuntimeException(e);
                                     }
                                 }
-                            }
-                        } else {
-                            long timestamp = Long.valueOf(line.get(colum.get(LuceneFieldKeys.timestamp)));
-                            Document doc = SyslogReceiver.parse(
-                                timestamp,
-                                line.get(colum.get(LuceneFieldKeys.addr)),
-                                Integer.valueOf(line.get(colum.get(LuceneFieldKeys.port))),
-                                line.get(colum.get(LuceneFieldKeys.raw))
-                            );
-                            docs.add(doc);
-                            if (docs.size() == chunk) {
-                                lucene.add(docs);
-                                docs.clear();
-                            }
+                                @Override
+                                public Document next() {
+                                    try {
+                                        progress.accept(new Progress(entry.getValue(), ++count));
+                                        List<String> line = Arrays.asList(reader.readLine().split("\t"));
+                                        long timestamp = Long.valueOf(line.get(colum.get(LuceneFieldKeys.timestamp)));
+                                        return SyslogReceiver.parse(
+                                            timestamp,
+                                            line.get(colum.get(LuceneFieldKeys.addr)),
+                                            Integer.valueOf(line.get(colum.get(LuceneFieldKeys.port))),
+                                            line.get(colum.get(LuceneFieldKeys.raw))
+                                        );
+                                    } catch (Exception e) {
+                                        close();
+                                        throw new RuntimeException(e);
+                                    }
+                                }
+                                private void close() {
+                                    try {
+                                        reader.close();
+                                    } catch (Exception e) {
+                                        e.printStackTrace();
+                                    }
+                                }
+                            };
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
                         }
                     }
-                    if (docs.size() > 0) {
-                        lucene.add(docs);
-                    }
-                }
+                };
+                lucene.add(docs);
             });
 
             job.setType("import");

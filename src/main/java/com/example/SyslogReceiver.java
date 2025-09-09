@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -34,7 +35,6 @@ import org.apache.lucene.document.TextField;
 import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.queryparser.flexible.core.QueryNodeException;
 import org.apache.lucene.queryparser.flexible.standard.config.PointsConfig;
-import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.SortedNumericSortField;
@@ -45,7 +45,6 @@ import org.slf4j.LoggerFactory;
 import org.slf4j.spi.LoggingEventBuilder;
 
 import com.example.LuceneManager.LuceneReader;
-import com.example.LuceneManager.LuceneTransaction;
 import com.example.SyslogParser.Facility;
 import com.example.SyslogParser.Rfc3164;
 import com.example.SyslogParser.Severity;
@@ -295,7 +294,6 @@ public class SyslogReceiver implements Runnable {
             LuceneManager src = new LuceneManager(System.getProperty("lucene.migration.src", "index"));
             LuceneManager dst = new LuceneManager(System.getProperty("lucene.migration.dst", "migrated"));
             LuceneReader reader = src.getReader();
-            LuceneTransaction tran = dst.beginTransaction();
         ) {
             TopDocs hits = reader.search(
                 LuceneFieldKeys.message.name(),
@@ -307,27 +305,36 @@ public class SyslogReceiver implements Runnable {
                 )),
                 LuceneFieldKeys.getPointsConfig(ZoneOffset.UTC)
             );
-            int chunk = Integer.getInteger("lucene.migration.chunk", 1000);
-            List<Document> docs = new ArrayList<>();
-            for (ScoreDoc score: ProgressBar.wrap(Arrays.asList(hits.scoreDocs), "migration")) {
-                Document srcDoc = reader.get(score.doc);
-                long timestamp = Long.valueOf(srcDoc.get(LuceneFieldKeys.timestamp.name()));
-                Document dstDoc = SyslogReceiver.parse(
-                    timestamp,
-                    srcDoc.get(LuceneFieldKeys.addr.name()),
-                    Integer.valueOf(srcDoc.get(LuceneFieldKeys.port.name())),
-                    srcDoc.get(LuceneFieldKeys.raw.name())
-                );
-                docs.add(dstDoc);
-                if (docs.size() == chunk) {
-                    tran.add(docs);
-                    docs.clear();
-                }
+            try (ProgressBar pb = new ProgressBar("migration", hits.scoreDocs.length)) {
+                dst.add(new Iterable<Document>() {
+                    @Override
+                    public Iterator<Document> iterator() {
+                        return new Iterator<Document>() {
+                            int i = 0;
+                            @Override
+                            public boolean hasNext() {
+                                return i < hits.scoreDocs.length;
+                            }
+                            @Override
+                            public Document next() {
+                                try {
+                                    pb.stepTo(i + 1);
+                                    Document doc = reader.get(hits.scoreDocs[i++].doc);
+                                    long timestamp = Long.valueOf(doc.get(LuceneFieldKeys.timestamp.name()));
+                                    return SyslogReceiver.parse(
+                                        timestamp,
+                                        doc.get(LuceneFieldKeys.addr.name()),
+                                        Integer.valueOf(doc.get(LuceneFieldKeys.port.name())),
+                                        doc.get(LuceneFieldKeys.raw.name())
+                                    );
+                                } catch (Exception e) {
+                                    throw new RuntimeException(e);
+                                }
+                            }
+                        };
+                    }
+                });
             }
-            if (docs.size() > 0) {
-                tran.add(docs);
-            }
-            tran.commit();
         }
     }
     
