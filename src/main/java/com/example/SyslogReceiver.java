@@ -56,23 +56,6 @@ public class SyslogReceiver implements Runnable {
 
     private Logger logger = LoggerFactory.getLogger(this.getClass());
 
-    public static enum Time {
-        SECOND(1000),
-        MINUTE(Time.SECOND.time * 60),
-        HOUR(Time.MINUTE.time * 60),
-        DAY(Time.HOUR.time * 24);
-
-        private final int time;
-
-        private Time(int time) {
-            this.time = time;
-        }
-
-        public int getTime() {
-            return this.time;
-        }
-    }
-
     public static enum LuceneFieldKeys {
         sort(LongField.class, long.class),
         timestamp(LongPoint.class, long[].class),
