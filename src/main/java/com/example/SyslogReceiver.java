@@ -281,8 +281,7 @@ public class SyslogReceiver implements Runnable {
         long timestamp = Long.valueOf(doc.get(LuceneFieldKeys.timestamp.name()));
         OffsetDateTime datetime = OffsetDateTime.ofInstant(new Date(timestamp).toInstant(), offset);
         return new HashMap<>() {{
-            this.put("day", datetime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
-            this.put("time", datetime.format(DateTimeFormatter.ofPattern("HH:mm:ss")));
+            this.put("datetime", datetime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
             for (LuceneFieldKeys field: LuceneFieldKeys.values()) {
                 this.put(field.name(), doc.get(field.name()));
             }

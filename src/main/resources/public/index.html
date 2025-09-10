@@ -158,8 +158,8 @@
                     >
                       <Column
                         v-for="field in table.fields[0]"
-                        :field="field.name"
-                        :header="field.name"
+                        :field="field.field"
+                        :header="field.header"
                         :headerStyle="{'background-color': 'lightgray'}"
                       >
                       </Column>
@@ -201,7 +201,7 @@
               </div>
               <div>
                 <h3>Table</h3>
-                <PickList v-model="table.fields" dataKey="name">
+                <PickList v-model="table.fields" dataKey="field">
                   <template v-slot:sourceheader>
                     <label style="font-weight: bold;">Show</label>
                   </template>
@@ -209,7 +209,7 @@
                     <label style="font-weight: bold;">Hidden</label>
                   </template>
                   <template #option="{ option }">
-                    <label style="width: 100px;">{{ option.name }}</label>
+                    <label style="width: 100px;">{{ option.header }}</label>
                   </template>
                 </PickList>
               </div>
@@ -312,20 +312,18 @@
             },
             table: {
               fields: [[
-                {name: 'day'},
-                {name: 'time'},
-                {name: 'host'},
-                {name: 'facility'},
-                {name: 'severity'},
-                {name: 'message'},
+                {field: 'datetime', header: 'timestamp'},
+                {field: 'host', header: 'host'},
+                {field: 'facility', header: 'facility'},
+                {field: 'severity', header: 'severity'},
+                {field: 'message', header: 'message'},
               ], [
-                // {name: 'id'},
-                {name: 'timestamp'},
-                {name: 'sort'},
-                {name: 'format'},
-                {name: 'addr'},
-                {name: 'port'},
-                {name: 'raw'},
+                // {field: 'id', header: 'id'},
+                {field: 'sort', header: 'sort'},
+                {field: 'format', header: 'format'},
+                {field: 'addr', header: 'addr'},
+                {field: 'port', header: 'port'},
+                {field: 'raw', header: 'raw'},
               ]],
               logs: [],
               total: 0,
