@@ -133,7 +133,7 @@
               <Tabs :value="tab" @update:value="tabSwitch" style="height: 100%; padding: 10px 10px 0 10px;">
                 <TabList>
                   <Tab value="table">Table</Tab>
-                  <Tab value="barchart">Chart</Tab>
+                  <Tab value="summary">Summary</Tab>
                 </TabList>
                 <TabPanels>
                   <TabPanel value="table">
@@ -166,18 +166,18 @@
                       <template #empty> no data. </template>
                     </DataTable>
                   </TabPanel>
-                  <TabPanel value="barchart">
+                  <TabPanel value="summary">
                     <div style="display: flex;">
                       <IftaLabel style="width: 50%;">
-                        <Select style="width: 100%;" v-model="barchart.yaxis" inputId="yaxis" :options="Object.keys(axis)" @change="changeAxis" />
+                        <Select style="width: 100%;" v-model="summary.yaxis" inputId="yaxis" :options="Object.keys(axis)" @change="changeAxis" />
                         <label for="yaxis">Y-Axis</label>
                       </IftaLabel>
                       <IftaLabel style="width: 50%;">
-                        <Select style="width: 100%;" v-model="barchart.xaxis" inputId="xaxis" :options="Object.keys(axis)" @change="changeAxis" />
+                        <Select style="width: 100%;" v-model="summary.xaxis" inputId="xaxis" :options="Object.keys(axis)" @change="changeAxis" />
                         <label for="xaxis">X-Axis</label>
                       </IftaLabel>
                     </div>
-                    <div ref="barchart" style="height: calc(100% - 58px);"></div>
+                    <div ref="summary" style="height: calc(100% - 58px);"></div>
                   </TabPanel>
                 </TabPanels>
               </Tabs>
@@ -382,7 +382,7 @@
                 collect: data => this.$data.config.severity
               },
             },
-            barchart: {
+            summary: {
               instance: null,
               yaxis: 'host',
               xaxis: 'severity',
@@ -525,7 +525,7 @@
             if (this.$data.tab == 'table') {
               this.pageChange();
             } else {
-              this.showChart();
+              this.showSummary();
             }
           },
           treeUnselect: function(node) {
@@ -533,7 +533,7 @@
             if (this.$data.tab == 'table') {
               this.pageChange();
             } else {
-              this.showChart();
+              this.showSummary();
             }
           },
           treeExpand: function(node) {
@@ -615,7 +615,7 @@
             return Promise.resolve().then(
               () => this.pageChange({first: 0, rows: this.$data.table.rows}, true)
             ).then(
-              () => this.showChart()
+              () => this.showSummary()
             ).then(() => {
               this.$data.tree.value = [{
                 key: 0,
@@ -684,7 +684,7 @@
           switchRealTimeMode() {
             this.$data.table.logs = [];
             this.$data.table.total = 0;
-            this.$data.barchart.instance?.clear();
+            this.$data.summary.instance?.clear();
             this.$data.tree.selected = null;
             this.$data.tree.selectedKeys = [];
             this.$data.tree.value = [{
@@ -696,13 +696,13 @@
               },
               leaf: true
             }];
-            this.showChart();
+            this.showSummary();
             if (this.$data.realtime.enable) {
               this.$data.realtime.socket = new WebSocket("/ws/realtime");
               this.$data.realtime.socket.addEventListener("message", event => {
                 this.$data.table.logs = [JSON.parse(event.data)].concat(this.$data.table.logs);
                 this.$data.tree.value[0].data.count++;
-                this.showChart();
+                this.showSummary();
               });
             } else {
               this.$data.realtime.socket.close();
@@ -712,12 +712,12 @@
           },
           tabSwitch: function(tab) {
             this.$data.tab = tab;
-            this.$data.barchart.instance?.clear();
-            this.showChart();
+            this.$data.summary.instance?.clear();
+            this.showSummary();
           },
           changeAxis: function() {
-            this.$data.barchart.instance?.clear();
-            this.showChart();
+            this.$data.summary.instance?.clear();
+            this.showSummary();
           },
           changeDrilldown: function() {
             if (!this.$data.realtime.enable) {
@@ -726,15 +726,15 @@
               this.search();
             }
           },
-          showChart: function() {
-            if (this.$data.tab == 'barchart') {
-              var yaxis = this.$data.axis[this.$data.barchart.yaxis];
-              var xaxis = this.$data.axis[this.$data.barchart.xaxis];
+          showSummary: function() {
+            if (this.$data.tab == 'summary') {
+              var yaxis = this.$data.axis[this.$data.summary.yaxis];
+              var xaxis = this.$data.axis[this.$data.summary.xaxis];
               var promise = (this.$data.realtime.enable
                 ? Promise.resolve().then(() => {
                     var result = {
-                      yaxis: yaxis.collect(this.$data.table.logs.map(row => row[this.$data.barchart.yaxis])),
-                      xaxis: xaxis.collect(this.$data.table.logs.map(row => row[this.$data.barchart.xaxis])),
+                      yaxis: yaxis.collect(this.$data.table.logs.map(row => row[this.$data.summary.yaxis])),
+                      xaxis: xaxis.collect(this.$data.table.logs.map(row => row[this.$data.summary.xaxis])),
                       count: {}
                     };
                     for (var y of result.yaxis) {
@@ -749,8 +749,8 @@
                     return result;
                   })
                 : Promise.all([
-                    this.groupCount(encodeURIComponent(this.getQuery()), this.$data.barchart.yaxis),
-                    this.groupCount(encodeURIComponent(this.getQuery()), this.$data.barchart.xaxis),
+                    this.groupCount(encodeURIComponent(this.getQuery()), this.$data.summary.yaxis),
+                    this.groupCount(encodeURIComponent(this.getQuery()), this.$data.summary.xaxis),
                   ]).then(([y, x]) => {
                     var result = {
                       yaxis: yaxis.collect(Object.keys(y.data)),
@@ -767,7 +767,7 @@
                       Promise.all(result.yaxis.map(y => {
                         return this.groupCount(
                           `${encodeURIComponent(this.getQuery())} AND ${yaxis.query(y)}`,
-                          this.$data.barchart.xaxis
+                          this.$data.summary.xaxis
                         ).then(x => {
                           for (var [key, value] of Object.entries(x.data)) {
                             result.count[y][key] = value;
@@ -780,10 +780,10 @@
                   })
               );
               return promise.then(response => {
-                var barchart = this.$data.barchart.instance || echarts.init(this.$refs.barchart);
-                if (!this.$data.barchart.instance) {
-                  this.$data.barchart.instance = barchart;
-                  barchart.on('dblclick', (event) => {
+                var summary = this.$data.summary.instance || echarts.init(this.$refs.summary);
+                if (!this.$data.summary.instance) {
+                  this.$data.summary.instance = summary;
+                  summary.on('dblclick', (event) => {
                     if (!this.$data.realtime.enable) {
                       this.$data.condition.query = `(${this.$data.condition.query?.trim() || '*:*'}) `
                         + `AND ${yaxis.query(event.name)} `
@@ -826,7 +826,7 @@
                     };
                   })
                 };
-                barchart.setOption(option);
+                summary.setOption(option);
               }).catch(e => {
                 this.$data.toast.add({
                   severity: 'error',
