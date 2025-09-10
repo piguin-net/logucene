@@ -140,18 +140,18 @@ public class Main
                     return null;
                 }
             };
-            return new HashMap<>() {{
-                this.put("type", getType().name().toLowerCase());
-                this.put("event", getProgress().event.name());
-                this.put("id", hashCode());
-                this.put("start", convert.apply(getStartTime()));
-                this.put("finish", convert.apply(getFinishTime()));
-                this.put("format", getFormat().name());
-                this.put("progress", getProgress());
-                if (getError() != null) {
-                    this.put("error", getError().getMessage());
-                }
-            }};
+            Map<String, Object> result = new HashMap<>();
+            result.put("type", this.getType().name().toLowerCase());
+            result.put("event", this.getProgress().event.name());
+            result.put("id", this.hashCode());
+            result.put("start", convert.apply(this.getStartTime()));
+            result.put("finish", convert.apply(this.getFinishTime()));
+            result.put("format", this.getFormat().name());
+            result.put("progress", this.getProgress());
+            if (this.getError() != null) {
+                result.put("error", this.getError().getMessage());
+            }
+            return result;
         }
     }
 
