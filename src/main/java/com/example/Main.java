@@ -93,34 +93,65 @@ public class Main
     private static ScriptEngine engine = manager.getEngineByName("groovy");
     private static Map<Integer, ImportExportJob> jobs = new HashMap<>();
 
+    public static enum JobType {
+        Export,
+        Import
+    }
+    public static enum FileFormat {
+        SQLite("sqlite3"),
+        TSV("tsv");
+        private final String ext;
+        private FileFormat(String ext) {
+            this.ext = ext;
+        }
+        public String getExt() {
+            return this.ext;
+        }
+    }
     public static class ImportExportJob extends Job<TempFile> {
         public ImportExportJob(TempFile data, Task<TempFile> task) {
             super(data, task);
         }
 
-        private String type;
-        private String format;
-        private String ext;
+        private JobType type;
+        private FileFormat format;
 
-        public String getType() {
+        public JobType getType() {
             return type;
         }
-        public void setType(String type) {
+        public void setType(JobType type) {
             this.type = type;
         }
 
-        public String getFormat() {
+        public FileFormat getFormat() {
             return format;
         }
-        public void setFormat(String format) {
+        public void setFormat(FileFormat format) {
             this.format = format;
         }
 
-        public String getExt() {
-            return ext;
-        }
-        public void setExt(String ext) {
-            this.ext = ext;
+        public Map<String, Object> payload(ZoneOffset offset) {
+            Function<Long, String> convert = (timestamp) -> {
+                if (timestamp != null) {
+                    return OffsetDateTime
+                        .ofInstant(new Date(timestamp).toInstant(), offset)
+                        .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+                } else {
+                    return null;
+                }
+            };
+            return new HashMap<>() {{
+                this.put("type", getType().name().toLowerCase());
+                this.put("event", getProgress().event.name());
+                this.put("id", hashCode());
+                this.put("start", convert.apply(getStartTime()));
+                this.put("finish", convert.apply(getFinishTime()));
+                this.put("format", getFormat().name());
+                this.put("progress", getProgress());
+                if (getError() != null) {
+                    this.put("error", getError().getMessage());
+                }
+            }};
         }
     }
 
@@ -469,7 +500,7 @@ public class Main
     }
 
     private static void exportTsv(Context ctx) throws IOException, ClassNotFoundException, SQLException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException, ParseException, QueryNodeException {
-        TempFile temp = new TempFile("logucene_", ".csv");
+        TempFile temp = new TempFile("logucene_", FileFormat.TSV.getExt());
         ZoneOffset offset = getZoneOffset(ctx.cookieMap());
         SearchResult hits = search(ctx.queryParam("query"), getZoneOffset(ctx.cookieMap()));
 
@@ -499,13 +530,12 @@ public class Main
             }
         });
 
-        job.setType("export");
-        job.setFormat("tsv");
-        job.setExt("tsv");
+        job.setType(JobType.Export);
+        job.setFormat(FileFormat.TSV);
 
         job.onUpdate((progress) -> {
             try {
-                notifyAll(jobConnections, payload(job, offset));
+                notifyAll(jobConnections, job.payload(offset));
             } catch (JsonProcessingException e) {
                 // TODO Auto-generated catch block
                 e.printStackTrace();
@@ -619,13 +649,12 @@ public class Main
                 lucene.add(docs);
             });
 
-            job.setType("import");
-            job.setFormat("tsv");
-            job.setExt("tsv");
+            job.setType(JobType.Import);
+            job.setFormat(FileFormat.TSV);
 
             job.onUpdate((progress) -> {
                 try {
-                    notifyAll(jobConnections, payload(job, offset));
+                    notifyAll(jobConnections, job.payload(offset));
                 } catch (JsonProcessingException e) {
                     // TODO Auto-generated catch block
                     e.printStackTrace();
@@ -638,7 +667,7 @@ public class Main
     }
 
     private static void exportSqlite(Context ctx) throws IOException, ParseException, QueryNodeException {
-        TempFile temp = new TempFile("logucene_", ".sqlite3");
+        TempFile temp = new TempFile("logucene_", FileFormat.SQLite.getExt());
         ZoneOffset offset = getZoneOffset(ctx.cookieMap());
         SearchResult hits = search(ctx.queryParam("query"), getZoneOffset(ctx.cookieMap()));
 
@@ -717,13 +746,12 @@ public class Main
             }
         });
 
-        job.setType("export");
-        job.setFormat("sqlite3");
-        job.setExt("sqlite3");
+        job.setType(JobType.Export);
+        job.setFormat(FileFormat.SQLite);
 
         job.onUpdate((progress) -> {
             try {
-                notifyAll(jobConnections, payload(job, offset));
+                notifyAll(jobConnections, job.payload(offset));
             } catch (JsonProcessingException e) {
                 // TODO Auto-generated catch block
                 e.printStackTrace();
@@ -756,7 +784,7 @@ public class Main
         ctx.contentType(
             "application/octet-stream"
         ).header(
-            "Content-Disposition", "attachment; filename=\"logucene." + job.getExt() + ".gz\""
+            "Content-Disposition", "attachment; filename=\"logucene." + job.getFormat().getExt() + ".gz\""
         ).result(
             pin
         );
@@ -766,7 +794,7 @@ public class Main
         ZoneOffset offset = getZoneOffset(ctx.cookieMap());
         ctx.json(new HashMap<>() {{
             for (ImportExportJob job: jobs.values()) {
-                this.put(job.hashCode(), payload(job, offset));
+                this.put(job.hashCode(), job.payload(offset));
             }
         }});
     }
@@ -777,33 +805,9 @@ public class Main
         job.getData().delete();
         jobs.remove(id);
         notifyAll(jobConnections, new HashMap<>() {{
-            this.put("type", job.getType());
+            this.put("type", job.getType().name().toLowerCase());
             this.put("event", "remove");
             this.put("id", job.hashCode());
         }});
-    }
-
-    private static Map<String, Object> payload(ImportExportJob job, ZoneOffset offset) {
-        Function<Long, String> convert = (timestamp) -> {
-            if (timestamp != null) {
-                return OffsetDateTime
-                    .ofInstant(new Date(timestamp).toInstant(), offset)
-                    .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-            } else {
-                return null;
-            }
-        };
-        return new HashMap<>() {{
-            this.put("type", job.getType());
-            this.put("event", job.getProgress().event.name());
-            this.put("id", job.hashCode());
-            this.put("start", convert.apply(job.getStartTime()));
-            this.put("finish", convert.apply(job.getFinishTime()));
-            this.put("format", job.getFormat());
-            this.put("progress", job.getProgress());
-            if (job.getError() != null) {
-                this.put("error", job.getError().getMessage());
-            }
-        }};
     }
 }
