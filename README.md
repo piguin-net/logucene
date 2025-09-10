@@ -45,12 +45,13 @@ podman run --rm -v $PWD:/workdir --workdir /workdir maven mvn package
 sudo podman build -t logucene .
 sudo podman run -it -d \
   --name logucene \
-  --restart=always \
   --user `id -u`:`id -g` \
   -v $PWD/index:/opt/logucene/index \
   -p 514:2514/udp \
   -p 8080:8080 \
   logucene
+sudo podman generate systemd --name logucene | sudo tee /etc/systemd/system/logucene.service
+sudo systemctl enable logucene.service
 ```
 データ移行
 ```
