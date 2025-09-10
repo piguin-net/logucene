@@ -23,7 +23,8 @@ public class Job<T> {
     public static enum Event {
         start,
         progress,
-        finish
+        finish,
+        remove;
     }
 
     public static interface EventListener {
@@ -31,17 +32,11 @@ public class Job<T> {
     }
 
     public static class Progress {
-        public Event event;
+        public Event event = Event.progress;
         public long max = 1;
         public long current = 0;
         public Progress() {}
         public Progress(long max, long current) {
-            this.event = Event.progress;
-            this.max = max;
-            this.current = current;
-        }
-        public Progress(Event event, long max, long current) {
-            this.event = event;
             this.max = max;
             this.current = current;
         }
@@ -55,7 +50,9 @@ public class Job<T> {
                 this.progress.event = Event.start;
                 if (this.eventListner != null) this.eventListner.accept(progress);
                 task.call(this.data, progress -> {
-                    this.progress = progress;
+                    this.progress.event = Event.progress;
+                    this.progress.max = progress.max;
+                    this.progress.current = progress.current;
                 });
             } catch (Exception e) {
                 this.error = e;

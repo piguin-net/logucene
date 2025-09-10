@@ -806,7 +806,7 @@ public class Main
         jobs.remove(id);
         notifyAll(jobConnections, new HashMap<>() {{
             this.put("type", job.getType().name().toLowerCase());
-            this.put("event", "remove");
+            this.put("event", Job.Event.remove.name());
             this.put("id", job.hashCode());
         }});
     }
