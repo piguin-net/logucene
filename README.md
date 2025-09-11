@@ -8,13 +8,13 @@ luceneを使ってみたかったため、転職活動の一環として、こ�
 # 使い方
 ローカルで試す
 ```
-mvn package
+mvn -s settings.xml package
 java -jar target/logucene-1.3-SNAPSHOT-jar-with-dependencies.jar
 ```
 Dockerで試す
 ```
 mkdir index
-sudo docker run --rm -v $PWD:/workdir --workdir /workdir --user `id -u`:`id -g` maven mvn package
+sudo docker run --rm -v $PWD:/workdir --workdir /workdir --user `id -u`:`id -g` maven mvn -s settings.xml package
 sudo docker run --rm \
   --user `id -u`:`id -g` \
   --workdir /opt/logucene \
@@ -27,7 +27,7 @@ sudo docker run --rm \
 Dockerのイメージを作成して試す
 ```
 mkdir index
-sudo docker run --rm -v $PWD:/workdir --workdir /workdir --user `id -u`:`id -g` maven mvn package
+sudo docker run --rm -v $PWD:/workdir --workdir /workdir --user `id -u`:`id -g` maven mvn -s settings.xml package
 sudo docker build -t logucene .
 sudo docker run -it -d \
   --name logucene \
@@ -41,7 +41,7 @@ sudo docker run -it -d \
 Podmanのイメージを作成して試す
 ```
 mkdir index
-podman run --rm -v $PWD:/workdir --workdir /workdir maven mvn package
+podman run --rm -v $PWD:/workdir --workdir /workdir maven mvn -s settings.xml package
 sudo podman build -t logucene .
 sudo podman run -it -d \
   --name logucene \
