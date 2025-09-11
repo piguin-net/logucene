@@ -569,17 +569,28 @@ public class Main
                     .ofInstant(new Date(timestamp).toInstant(), zone)
                     .format(format);
 
-                Map<String, Long> count = new HashMap<>() {{
+                Function<Long, String> minmaxFormatter = timestamp -> OffsetDateTime
+                    .ofInstant(new Date(timestamp).toInstant(), zone)
+                    .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS"));
+
+                Map<String, Map<String, Object>> count = new HashMap<>() {{
                     long current = min;
                     do {
-                        this.put(formatter.apply(current), 0l);
+                        Map<String, Object> value = new HashMap<>();
+                        value.put("min",   minmaxFormatter.apply(current));
+                        value.put("max",   minmaxFormatter.apply(current + width - 1));
+                        value.put("count", 0l);
+                        this.put(formatter.apply(current), value);
                         current += width;
                     } while (current < max);
                 }};
 
                 for (Entry<LongRange, Long> entry: result.entrySet()) {
-                    String hour = formatter.apply(entry.getKey().min);
-                    count.put(hour, entry.getValue());
+                    count.put(formatter.apply(entry.getKey().min), new HashMap<>() {{
+                        this.put("min",   minmaxFormatter.apply(entry.getKey().min));
+                        this.put("max",   minmaxFormatter.apply(entry.getKey().max - 1));
+                        this.put("count", entry.getValue());
+                    }});
                 }
 
                 ctx.json(count);

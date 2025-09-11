@@ -116,6 +116,7 @@
             </div>
           </div>
           <Splitter style="height: calc(100% - 58px);" @resize="onResize">
+            <!-- TODO: Tree/Summary/Timelineをこちらに表示 -->
             <SplitterPanel :size="20" :minSize="10">
               <Tree
                 :value="tree.value"
@@ -891,12 +892,6 @@
                       name: x,
                       type: 'bar',
                       stack: 'total',
-                      label: {
-                        show: true,
-                        formatter: params => {
-                          return params.value > 0 ? params.value.toLocaleString() : '';
-                        }
-                      },
                       emphasis: {
                         focus: 'series'
                       },
@@ -928,6 +923,15 @@
                 var timeline = this.$data.timeline.instance || echarts.init(this.$refs.timeline);
                 if (!this.$data.timeline.instance) {
                   this.$data.timeline.instance = timeline;
+                  timeline.on('dblclick', (event) => {
+                    console.log(event);
+                    if (!this.$data.realtime.enable) {
+                      this.$data.condition.query = `(${this.$data.condition.query?.trim() || '*:*'}) `
+                        + `AND timestamp:["${event.data.min}" TO "${event.data.max}"]`;
+                      this.search();
+                      this.$data.tab = 'table';
+                    }
+                  });
                 }
                 var xaxis = Object.keys(response.data).sort().reverse();
                 var option = {
@@ -947,7 +951,13 @@
                   },
                   series: {
                     type: 'bar',
-                    data: xaxis.map(key => response.data[key])
+                    data: xaxis.map(key => {
+                      return {
+                        value: response.data[key].count,
+                        min: response.data[key].min,
+                        max: response.data[key].max,
+                      };
+                    })
                   },
                   dataZoom: [
                     {
