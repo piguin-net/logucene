@@ -177,6 +177,7 @@ public class SyslogReceiver implements Runnable {
 
     @Override
     public void run() {
+        // TODO: non-blocking, thread
         byte[] buf = new byte[65535];
         DatagramPacket packet = new DatagramPacket(buf, buf.length);
         try {
