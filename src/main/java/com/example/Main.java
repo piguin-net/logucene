@@ -876,7 +876,10 @@ public class Main
 
     private static void download(Context ctx) throws IOException, ClassNotFoundException, SQLException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException, ParseException, QueryNodeException {
         int id = Integer.valueOf(ctx.queryParam("id"));
+        ZoneOffset offset = getZoneOffset(ctx.cookieMap());
+        ZoneId zone = offset.normalized();
         ImportExportJob job = jobs.get(id);
+
         PipedInputStream pin = new PipedInputStream();
         new Thread(() -> {
             try (
@@ -893,10 +896,22 @@ public class Main
                 throw new RuntimeException(e);
             } 
         }).start();
+
+        // TODO: 日時のフォーマットを共通化
+        Function<Long, String> formatter = timestamp -> OffsetDateTime
+            .ofInstant(new Date(timestamp).toInstant(), zone)
+            .format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"));
+
+        String filename = String.format(
+            "logucene_%s.%s.gz",
+            formatter.apply(job.getStartTime()),
+            job.getFormat().getExt()
+        );
+
         ctx.contentType(
             "application/octet-stream"
         ).header(
-            "Content-Disposition", "attachment; filename=\"logucene." + job.getFormat().getExt() + ".gz\""
+            "Content-Disposition", "attachment; filename=\"" + filename + "\""
         ).result(
             pin
         );
