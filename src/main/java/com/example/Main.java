@@ -372,16 +372,13 @@ public class Main
             this.put("settings", Settings.get());
             this.put("facility", Arrays.asList(Facility.values()).stream().map(item -> item.name()).toList());
             this.put("severity", Arrays.asList(Severity.values()).stream().map(item -> item.name()).toList());
-            // TODO: org.apache.lucene.index.DocValues
             this.put("host", new ArrayList<>() {{
                 try (LuceneReader reader = lucene.getReader();) {
-                    Map<BytesRef, Long> count = reader.groupCount(
-                        LuceneFieldKeys.message.name(),
-                        "*:*",
-                        LuceneFieldKeys.getPointsConfig(getZoneOffset(ctx.cookieMap())),
-                        LuceneFieldKeys.host.name()
-                    );
-                    this.addAll(count.keySet().stream().map(key -> key.utf8ToString()).sorted().toList());
+                    reader.getSortedDocValues(LuceneFieldKeys.host.name())
+                        .stream()
+                        .map(value -> new String(value))
+                        .sorted()
+                        .forEach(host -> this.add(host));
                 } catch (IndexNotFoundException e) {
                     logger.warn(e.getMessage(), e);
                 }

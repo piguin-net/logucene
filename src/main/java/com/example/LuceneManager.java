@@ -7,8 +7,10 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.Analyzer.ReuseStrategy;
@@ -17,9 +19,12 @@ import org.apache.lucene.analysis.AnalyzerWrapper;
 import org.apache.lucene.analysis.core.WhitespaceAnalyzer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.DirectoryReader;
+import org.apache.lucene.index.DocValues;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.IndexWriterConfig.OpenMode;
+import org.apache.lucene.index.LeafReaderContext;
+import org.apache.lucene.index.SortedDocValues;
 import org.apache.lucene.index.StoredFields;
 import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.queryparser.flexible.core.QueryNodeException;
@@ -118,6 +123,21 @@ public class LuceneManager implements Closeable {
                 }
             }
             return count;
+        }
+
+        public Set<byte[]> getSortedDocValues(String field) throws IOException {
+            return new HashSet<>() {{
+                for (LeafReaderContext context: reader.leaves()) {
+                    // SortedDocValues values = context.reader().getSortedDocValues(field);
+                    SortedDocValues values = DocValues.getSorted(context.reader(), field);
+                    for (int i = 0; i < values.getValueCount(); i++) {
+                        byte[] src = values.lookupOrd(i).bytes;
+                        byte[] dst = new byte[values.lookupOrd(i).length];
+                        for (int j = 0; j < dst.length; j++) dst[j] = src[j];
+                        this.add(dst);
+                    }
+                }
+            }};
         }
 
         @Override

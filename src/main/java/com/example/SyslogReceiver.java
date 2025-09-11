@@ -273,7 +273,7 @@ public class SyslogReceiver implements Runnable {
             doc.add(LuceneFieldKeys.format.field("unknown"));
             return doc;
         } finally {
-            // TODO: 処理を共通化
+            // TODO: 処理を共通化、DocValuesFieldの必要性を見直し
             doc.add(new SortedNumericDocValuesField(LuceneFieldKeys.sort.name(), timestamp));
             doc.add(new StoredField(LuceneFieldKeys.timestamp.name(), timestamp));
             doc.add(new NumericDocValuesField(LuceneFieldKeys.timestamp.name(), timestamp));
