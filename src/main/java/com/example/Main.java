@@ -369,7 +369,6 @@ public class Main
             this.put("settings", Settings.get());
             this.put("facility", Arrays.asList(Facility.values()).stream().map(item -> item.name()).toList());
             this.put("severity", Arrays.asList(Severity.values()).stream().map(item -> item.name()).toList());
-            // TODO: IndexNotFoundException
             // TODO: org.apache.lucene.index.DocValues
             this.put("host", new ArrayList<>() {{
                 try (LuceneReader reader = lucene.getReader();) {
@@ -380,6 +379,8 @@ public class Main
                         LuceneFieldKeys.host.name()
                     );
                     this.addAll(count.keySet().stream().map(key -> key.utf8ToString()).sorted().toList());
+                } catch (IndexNotFoundException e) {
+                    logger.warn(e.getMessage(), e);
                 }
             }});
             this.put("day", new HashMap<>() {{
@@ -402,6 +403,8 @@ public class Main
                         this.put("min", now);
                         this.put("max", now);
                     }
+                } catch (IndexNotFoundException e) {
+                    logger.warn(e.getMessage(), e);
                 }
             }});
             Locale locale = Locale.of(ctx.header("accept-language").split(",")[0]);
