@@ -16,6 +16,7 @@ import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -287,7 +288,7 @@ public class SyslogReceiver implements Runnable {
     public static Map<String, String> toMap(Document doc, ZoneOffset offset) {
         long timestamp = LuceneFieldKeys.timestamp.get(doc, Long.class);
         OffsetDateTime datetime = OffsetDateTime.ofInstant(new Date(timestamp).toInstant(), offset);
-        return new HashMap<>() {{
+        return new LinkedHashMap<>() {{
             this.put("datetime", datetime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
             for (LuceneFieldKeys field: LuceneFieldKeys.values()) {
                 this.put(field.name(), doc.get(field.name()));
