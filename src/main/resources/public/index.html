@@ -115,7 +115,7 @@
               <Button severity="help" icon="pi pi-cog" @click="showConfigDialog" />
             </div>
           </div>
-          <Splitter style="height: calc(100% - 58px);">
+          <Splitter style="height: calc(100% - 58px);" @resize="onResize">
             <SplitterPanel :size="20" :minSize="10">
               <Tree
                 :value="tree.value"
@@ -160,6 +160,7 @@
                       @page="pageChange"
                       style="padding: 10px;"
                       size="small"
+                      v-if="table.show"
                     >
                       <Column
                         v-for="field in table.fields[0]"
@@ -347,7 +348,8 @@
               total: 0,
               first: 0,
               rows: 1000,
-              selected: null
+              selected: null,
+              show: true
             },
             axis: {
               'host': {
@@ -421,6 +423,8 @@
           ).reduce(
             (acc, x) => `${acc} ${x}`
           );
+
+          window.addEventListener('resize', this.onResize);
 
           var count = 0;
           var unblock = () => {
@@ -527,6 +531,22 @@
           });
         },
         methods: {
+          onResize: function() {
+            switch (this.$data.tab) {
+              case 'table':
+                this.$data.table.show = false;
+                this.$nextTick(() => {
+                  this.$data.table.show = true;
+                });
+                break;
+              case 'summary':
+                this.$data.summary.instance?.resize();
+                break;
+              case 'timeline':
+                this.$data.timeline.instance?.resize();
+                break;
+            }
+          },
           showConfigDialog: function() {
             this.$data.dialog.config.show = true;
           },
