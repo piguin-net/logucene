@@ -27,6 +27,7 @@ import org.apache.lucene.document.Field;
 import org.apache.lucene.document.IntPoint;
 import org.apache.lucene.document.LongField;
 import org.apache.lucene.document.LongPoint;
+import org.apache.lucene.document.NumericDocValuesField;
 import org.apache.lucene.document.SortedDocValuesField;
 import org.apache.lucene.document.SortedNumericDocValuesField;
 import org.apache.lucene.document.StoredField;
@@ -117,6 +118,11 @@ public class SyslogReceiver implements Runnable {
                 this.put(LuceneFieldKeys.timestamp.name(), new PointsConfig(new DecimalFormat() {
                     @Override
                     public Number parse(String text) throws java.text.ParseException {
+                        try {
+                            return Long.valueOf(text);
+                        } catch (Exception e) {
+                            // pass
+                        }
                         for (String value: Arrays.asList(text, text + ".000", text + ":00.000", text + " 00:00:00.000")) {
                             try {
                                 return LocalDateTime.parse(value, format).atOffset(offset).toInstant().toEpochMilli();
@@ -128,6 +134,23 @@ public class SyslogReceiver implements Runnable {
                     }
                 }, Long.class));
             }};
+        }
+
+        // TODO: 横展開、doc.getField(this.name()).xxxValue()の方が良い
+        @SuppressWarnings("unchecked")
+        public <T> T get(Document doc, Class<T> clazz) {
+            Map<Class<?>, Supplier<T>> mapping = new HashMap<>() {{
+                this.put(String.class,  () -> (T) doc.get(name()));
+                this.put(int.class,     () -> (T) Integer.valueOf(doc.get(name())));
+                this.put(Integer.class, () -> (T) Integer.valueOf(doc.get(name())));
+                this.put(long.class,    () -> (T) Long.valueOf(doc.get(name())));
+                this.put(Long.class,    () -> (T) Long.valueOf(doc.get(name())));
+            }};
+            if (mapping.containsKey(clazz)) {
+                return mapping.get(clazz).get();
+            } else {
+                throw new IllegalArgumentException(String.format("%s is not supported.", clazz.getName()));
+            }
         }
     };
 
@@ -251,7 +274,7 @@ public class SyslogReceiver implements Runnable {
             // TODO: 処理を共通化
             doc.add(new SortedNumericDocValuesField(LuceneFieldKeys.sort.name(), timestamp));
             doc.add(new StoredField(LuceneFieldKeys.timestamp.name(), timestamp));
-            doc.add(new SortedDocValuesField(LuceneFieldKeys.timestamp.name(), new BytesRef(ByteBuffer.allocate(8).putLong(timestamp).array())));
+            doc.add(new NumericDocValuesField(LuceneFieldKeys.timestamp.name(), timestamp));
             doc.add(new StoredField(LuceneFieldKeys.port.name(), port));
             doc.add(new SortedDocValuesField(LuceneFieldKeys.port.name(), new BytesRef(ByteBuffer.allocate(4).putInt(port).array())));
             for (LuceneFieldKeys field: Arrays.asList(LuceneFieldKeys.values()).stream().filter(field -> field.fieldClazz == StringField.class).toList()) {

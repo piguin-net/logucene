@@ -85,26 +85,30 @@
             </div>
             <div style="display: flex; width: calc(100% - 100px);">
               <IftaLabel>
-                <DatePicker ref="datePicker" v-model="condition.day" :minDate="config.day.min" :maxDate="config.day.max" inputId="day" :disabled="realtime.enable" showIcon selectionMode="range" :manualInput="false" @update:modelValue="dateSelect" :inputStyle="{'width': '210px'}" />
-                <label for="day">Day</label>
+                <DatePicker v-model="condition.day.from" :minDate="config.day.min" :maxDate="config.day.max" inputId="day-from" :disabled="realtime.enable" showIcon showButtonBar @update:modelValue="changeSearchCondition" :inputStyle="{'width': '110px'}" />
+                <label for="day-from">Day(From)</label>
               </IftaLabel>
               <IftaLabel>
-                <MultiSelect v-model="condition.host" inputId="host" :disabled="realtime.enable" :options="config.host" style="width: 150px;" filter :maxSelectedLabels="1" @update:modelValue="search" />
+                <DatePicker v-model="condition.day.to" :minDate="config.day.min" :maxDate="config.day.max" inputId="day-to" :disabled="realtime.enable" showIcon showButtonBar @update:modelValue="changeSearchCondition" :inputStyle="{'width': '110px'}" />
+                <label for="day-to">Day(To)</label>
+              </IftaLabel>
+              <IftaLabel>
+                <MultiSelect v-model="condition.host" inputId="host" :disabled="realtime.enable" :options="config.host" style="width: 150px;" filter :maxSelectedLabels="1" @update:modelValue="changeSearchCondition" />
                 <label for="host">Host</label>
               </IftaLabel>
               <IftaLabel>
-                <MultiSelect v-model="condition.facility" inputId="facility" :disabled="realtime.enable" :options="config.facility" style="width: 150px;" filter :maxSelectedLabels="1" @update:modelValue="search" />
+                <MultiSelect v-model="condition.facility" inputId="facility" :disabled="realtime.enable" :options="config.facility" style="width: 150px;" filter :maxSelectedLabels="1" @update:modelValue="changeSearchCondition" />
                 <label for="facility">Facility</label>
               </IftaLabel>
               <IftaLabel>
-                <MultiSelect v-model="condition.severity" inputId="severity" :disabled="realtime.enable" :options="config.severity" style="width: 150px;" filter :maxSelectedLabels="1" @update:modelValue="search" />
+                <MultiSelect v-model="condition.severity" inputId="severity" :disabled="realtime.enable" :options="config.severity" style="width: 150px;" filter :maxSelectedLabels="1" @update:modelValue="changeSearchCondition" />
                 <label for="severity">Severity</label>
               </IftaLabel>
-              <IftaLabel style="width: calc(100% - 860px);">
-                <InputText type="text" v-model="condition.query" inputId="query" :disabled="realtime.enable" style="width: 100%;" @keydown="$event.key == 'Enter' && search()" />
+              <IftaLabel style="width: calc(100% - 950px);">
+                <InputText type="text" v-model="condition.query" inputId="query" :disabled="realtime.enable" style="width: 100%;" @keydown="$event.key == 'Enter' && changeSearchCondition()" />
                 <label for="query">Query</label>
               </IftaLabel>
-              <Button v-tooltip.bottom="'Search'" severity="success" icon="pi pi-search" :disabled="realtime.enable" @click="search" />
+              <Button v-tooltip.bottom="'Search'" severity="success" icon="pi pi-search" :disabled="realtime.enable" @click="changeSearchCondition" />
               <Button v-tooltip.bottom="'Download'" severity="info" icon="pi pi-download" :disabled="realtime.enable" @click="showDownloadDialog" />
               <Button v-tooltip.bottom="'Upload'" severity="danger" icon="pi pi-upload" :disabled="realtime.enable" @click="showUploadDialog" />
               <Button v-tooltip.bottom="'Clear Filter'" severity="warn" icon="pi pi-filter-slash" :disabled="realtime.enable" @click="clearFilter" />
@@ -134,6 +138,7 @@
                 <TabList>
                   <Tab value="table">Table</Tab>
                   <Tab value="summary">Summary</Tab>
+                  <Tab value="timeline" :disabled="realtime.enable">Timeline</Tab>
                 </TabList>
                 <TabPanels>
                   <TabPanel value="table">
@@ -169,15 +174,28 @@
                   <TabPanel value="summary">
                     <div style="display: flex;">
                       <IftaLabel style="width: 50%;">
-                        <Select style="width: 100%;" v-model="summary.yaxis" inputId="yaxis" :options="Object.keys(axis)" @change="changeAxis" />
-                        <label for="yaxis">Y-Axis</label>
+                        <Select style="width: 100%;" v-model="summary.yaxis" inputId="summary-yaxis" :options="Object.keys(axis)" @change="changeSummaryAxis" />
+                        <label for="summary-yaxis">Y-Axis</label>
                       </IftaLabel>
                       <IftaLabel style="width: 50%;">
-                        <Select style="width: 100%;" v-model="summary.xaxis" inputId="xaxis" :options="Object.keys(axis)" @change="changeAxis" />
-                        <label for="xaxis">X-Axis</label>
+                        <Select style="width: 100%;" v-model="summary.xaxis" inputId="summary-xaxis" :options="Object.keys(axis)" @change="changeSummaryAxis" />
+                        <label for="summary-xaxis">X-Axis</label>
                       </IftaLabel>
                     </div>
                     <div ref="summary" style="height: calc(100% - 58px);"></div>
+                  </TabPanel>
+                  <TabPanel value="timeline">
+                    <div style="display: flex;">
+                      <IftaLabel style="width: 50%;">
+                        <Select style="width: 100%;" v-model="timeline.yaxis" inputId="timeline-yaxis" :options="timeline.span" optionLabel="name" @change="changeTimelineAxis" />
+                        <label for="timeline-yaxis">Y-Axis</label>
+                      </IftaLabel>
+                      <IftaLabel style="width: 50%;">
+                        <Select style="width: 100%;" v-model="timeline.xaxis" inputId="timeline-xaxis" @change="changeTimelineAxis" />
+                        <label for="timeline-xaxis">X-Axis</label>
+                      </IftaLabel>
+                    </div>
+                    <div ref="timeline" style="height: calc(100% - 58px);"></div>
                   </TabPanel>
                 </TabPanels>
               </Tabs>
@@ -303,7 +321,7 @@
               severity: [],
             },
             condition: {
-              day: [null, null],
+              day: {from: null, to: null},
               host: [],
               facility: [],
               severity: [],
@@ -332,24 +350,6 @@
               selected: null
             },
             axis: {
-              // 'timestamp': {
-              //   query: value => {
-              //     var format = date => {
-              //       return `${date.getFullYear()}-${('0' + (date.getMonth() + 1)).slice(-2)}-${('0' + date.getDate()).slice(-2)}`;
-              //     };
-              //     var before = new Date(value);
-              //     before.setDate(before.getDate() + 1);
-              //     return `timestamp:["${value}" TO "${format(before)}"]`;
-              //   },
-              //   format: log => log.timestamp,
-              //   collect: data => [...new Set(data)].sort()
-              // },
-              // TODO: TextFieldだと範囲指定ができない
-              // 'time': {
-              //   query: value => `time:["${value}:00:00" TO "${value}:59:59"]`,
-              //   format: log => log.time.slice(0, 2),
-              //   collect: data => [...Array(24)].map((_, i) => ('0' + i).slice(-2))
-              // },
               'host': {
                 query: value => `host:"${value}"`,
                 format: log => log.host,
@@ -387,6 +387,16 @@
               yaxis: 'host',
               xaxis: 'severity',
             },
+            timeline: {
+              instance: null,
+              yaxis: {name: '1 day', value: 60 * 24},
+              xaxis: 'severity',
+              span: [
+                {name: '10 minutes', value: 10},
+                {name: '1 hour', value: 60},
+                {name: '1 day', value: 60 * 24},
+              ],
+            },
             tree: {
               value: [],
               selectedKeys: [],
@@ -395,8 +405,6 @@
                 'severity',
                 'host',
               ],[
-                // 'day',
-                // 'time',
                 'format',
                 'addr',
                 // 'port',  TODO: 数値はcount未対応
@@ -481,7 +489,6 @@
             this.$data.config.severity    = response.data.severity;
             this.$data.config.day.min     = new Date(response.data.day.min);
             this.$data.config.day.max     = new Date(response.data.day.max);
-            this.$data.condition.day      = [this.$data.config.day.min, this.$data.config.day.max];
             config.locale.dateFormat      = 'yy-mm-dd';
             config.locale.dayNames        = response.data.dayNames;
             config.locale.dayNamesMin     = response.data.dayNamesMin;
@@ -522,19 +529,11 @@
           },
           treeSelect: function(node) {
             this.$data.tree.selected = node;
-            if (this.$data.tab == 'table') {
-              this.pageChange();
-            } else {
-              this.showSummary();
-            }
+            this.tabSwitch();
           },
           treeUnselect: function(node) {
             this.$data.tree.selected = null;
-            if (this.$data.tab == 'table') {
-              this.pageChange();
-            } else {
-              this.showSummary();
-            }
+            this.tabSwitch();
           },
           treeExpand: function(node) {
             var axis = [...node.data.axis];
@@ -563,7 +562,7 @@
             });
           },
           clearFilter: function() {
-            this.$data.condition.day = [new Date(new Date().setDate(new Date().getDate() - 6)), new Date()];
+            this.$data.condition.day = {from: null, to: null};
             this.$data.condition.host = [];
             this.$data.condition.facility = [];
             this.$data.condition.severity = [];
@@ -572,18 +571,27 @@
             this.$data.tree.selectedKeys = [];
             this.search();
           },
-          dateSelect: function(event) {
-            if (this.$data.condition.day?.at(1) != null) this.search();
-          },
           getQuery: function(node, query) {
             query = `(${query || this.$data.condition.query?.trim() || '*:*'})`;
             node = node || this.$data.tree.selected;
-            if (this.$data.condition.day?.at(1) != null) {
-              var [from, to] = this.$data.condition.day;
-              var format = date => {
-                return `${date.getFullYear()}-${('0' + (date.getMonth() + 1)).slice(-2)}-${('0' + date.getDate()).slice(-2)}`;
+            var [from, to] = [this.$data.condition.day.from, this.$data.condition.day.to];
+            if (from || to) {
+              var format = (date, time) => {
+                if (date) {
+                  return `${date.getFullYear()}`
+                    + `-${('0' + (date.getMonth() + 1)).slice(-2)}`
+                    + `-${('0' + date.getDate()).slice(-2)}`
+                    + ' ' + time;
+                } else {
+                  return "*";
+                }
               };
-              query = `${query} AND timestamp:["${format(from)} 00:00:00.000" TO "${format(to)} 23:59:59.999"]`;
+              query = `${query} AND `
+                + `timestamp:[`
+                +   `"${format(from, '00:00:00.000')}"`
+                +   ` TO `
+                +   `"${format(to, '23:59:59.999')}"`
+                + `]`;
             }
             if (this.$data.condition.host.length > 0) {
               query = `${query} AND (${this.$data.condition.host.map(x => `host:"${x}"`).join(' OR ')})`;
@@ -606,33 +614,39 @@
             }
             return query;
           },
+          changeSearchCondition: function() {
+            this.tabSwitch();
+          },
           search: function(event) {
-            this.$data.table.logs = [];
-            this.$data.table.total = 0;
-            this.$data.table.first = 0;
-            this.$data.tree.selected = null;
-            this.$data.tree.selectedKeys = [];
-            return Promise.resolve().then(
-              () => this.pageChange({first: 0, rows: this.$data.table.rows}, true)
-            ).then(
-              () => this.showSummary()
-            ).then(() => {
-              this.$data.tree.value = [{
-                key: 0,
-                label: 'ALL',
-                data: {
-                  'key': '*',
-                  'value': '*',
-                  'subtotal': this.$data.table.total,
-                  'count': this.$data.table.total,
-                  'axis': [...this.$data.tree.drilldown[0]]
-                },
-                leaf: false
-              }];
-            });
+            if (!this.$data.realtime.enable) {
+              this.$data.table.logs = [];
+              this.$data.table.total = 0;
+              this.$data.table.first = 0;
+              this.$data.tree.selected = null;
+              this.$data.tree.selectedKeys = [];
+              return Promise.resolve().then(
+                () => this.pageChange({first: 0, rows: this.$data.table.rows}, true)
+              ).then(() => {
+                this.$data.tree.value = [{
+                  key: 0,
+                  label: 'ALL',
+                  data: {
+                    'key': '*',
+                    'value': '*',
+                    'subtotal': this.$data.table.total,
+                    'count': this.$data.table.total,
+                    'axis': [...this.$data.tree.drilldown[0]]
+                  },
+                  leaf: false
+                }];
+              });
+            }
           },
           groupCount: function(query, field) {
             return this.$data.http.get(`/api/group/count?query=${query}&field=${field}`);
+          },
+          timelineCount: function(query) {
+            return this.$data.http.get(`/api/group/count/timeline?query=${query}&span=${this.$data.timeline.yaxis.value}`);
           },
           pageChange: function(event, showToast) {
             this.$data.table.rows = event?.rows || this.$data.table.rows;
@@ -682,6 +696,7 @@
             this.$refs.uploadfile.upload();
           },
           switchRealTimeMode() {
+            this.$data.tab = 'table';
             this.$data.table.logs = [];
             this.$data.table.total = 0;
             this.$data.summary.instance?.clear();
@@ -696,13 +711,12 @@
               },
               leaf: true
             }];
-            this.showSummary();
             if (this.$data.realtime.enable) {
               this.$data.realtime.socket = new WebSocket("/ws/realtime");
               this.$data.realtime.socket.addEventListener("message", event => {
                 this.$data.table.logs = [JSON.parse(event.data)].concat(this.$data.table.logs);
                 this.$data.tree.value[0].data.count++;
-                this.showSummary();
+                this.showSummary(true);
               });
             } else {
               this.$data.realtime.socket.close();
@@ -711,13 +725,26 @@
             }
           },
           tabSwitch: function(tab) {
-            this.$data.tab = tab;
-            this.$data.summary.instance?.clear();
+            if (tab) {
+              this.$data.tab = tab;
+            }
+            switch (this.$data.tab) {
+              case 'table':
+                this.search();
+                break;
+              case 'summary':
+                this.showSummary();
+                break;
+              case 'timeline':
+                this.showTimeline();
+                break;
+            }
+          },
+          changeSummaryAxis: function() {
             this.showSummary();
           },
-          changeAxis: function() {
-            this.$data.summary.instance?.clear();
-            this.showSummary();
+          changeTimelineAxis: function() {
+            this.showTimeline();
           },
           changeDrilldown: function() {
             if (!this.$data.realtime.enable) {
@@ -726,8 +753,12 @@
               this.search();
             }
           },
-          showSummary: function() {
+          showSummary: function(update) {
             if (this.$data.tab == 'summary') {
+              if (!update) {
+                this.$data.summary.instance?.dispose();
+                this.$data.summary.instance = null;
+              }
               var yaxis = this.$data.axis[this.$data.summary.yaxis];
               var xaxis = this.$data.axis[this.$data.summary.xaxis];
               var promise = (this.$data.realtime.enable
@@ -766,7 +797,7 @@
                     return new Promise((resolve, reject) => {
                       Promise.all(result.yaxis.map(y => {
                         return this.groupCount(
-                          `${encodeURIComponent(this.getQuery())} AND ${yaxis.query(y)}`,
+                          encodeURIComponent(this.getQuery() + ' AND ' + yaxis.query(y)),
                           this.$data.summary.xaxis
                         ).then(x => {
                           for (var [key, value] of Object.entries(x.data)) {
@@ -831,6 +862,68 @@
                 this.$data.toast.add({
                   severity: 'error',
                   summary: e,
+                });
+              });
+            } else {
+              return Promise.resolve();
+            }
+          },
+          showTimeline: function(update) {
+            if (this.$data.tab == 'timeline') {
+              if (!update) {
+                this.$data.timeline.instance?.dispose();
+                this.$data.timeline.instance = null;
+              }
+              var query = encodeURIComponent(this.getQuery());
+              this.timelineCount(
+                query
+              ).then(response => {
+                var timeline = this.$data.timeline.instance || echarts.init(this.$refs.timeline);
+                if (!this.$data.timeline.instance) {
+                  this.$data.timeline.instance = timeline;
+                }
+                var xaxis = Object.keys(response.data).sort().reverse();
+                var option = {
+                  tooltip: {
+                    trigger: 'axis',
+                    axisPointer: {
+                      type: 'shadow'
+                    }
+                  },
+                  legend: {},
+                  xAxis: {
+                    type: 'value'
+                  },
+                  yAxis: {
+                    type: 'category',
+                    data: xaxis
+                  },
+                  series: {
+                    type: 'bar',
+                    data: xaxis.map(key => response.data[key])
+                  },
+                  dataZoom: [
+                    {
+                      type: 'inside',
+                      yAxisIndex: 0,
+                      start: 0,
+                      end: 100,
+                      zoomOnMouseWheel: 'ctrl',
+                      moveOnMouseWheel: true
+                    },
+                    {
+                      type: 'slider',
+                      yAxisIndex: 0,
+                      start: 0,
+                      end: 100
+                    }
+                  ]
+                };
+                timeline.setOption(option);
+              }).catch(e => {
+                this.$data.toast.add({
+                  severity: 'error',
+                  timeline: e,
                 });
               });
             } else {

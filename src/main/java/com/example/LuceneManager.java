@@ -30,6 +30,8 @@ import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.grouping.GroupDocs;
 import org.apache.lucene.search.grouping.GroupingSearch;
+import org.apache.lucene.search.grouping.LongRange;
+import org.apache.lucene.search.grouping.LongRangeGroupSelector;
 import org.apache.lucene.search.grouping.TopGroups;
 import org.apache.lucene.store.FSDirectory;
 
@@ -86,6 +88,31 @@ public class LuceneManager implements Closeable {
                     if (result.groups.length == 0) break;
                     offset += limit;
                     for (GroupDocs<T> group: result.groups) {
+                        count.put(group.groupValue(), group.totalHits().value());
+                    }
+                }
+            }
+            return count;
+        }
+
+        public Map<LongRange, Long> groupCount(String field, String query, Map<String, PointsConfig> pointsConfig, LongRangeGroupSelector selector) throws IOException, QueryNodeException {
+            GroupingSearch groupingSearch = new GroupingSearch(selector);
+            StandardQueryParser parser = new StandardQueryParser(this.analyzer);
+            parser.setPointsConfigMap(pointsConfig);
+            Map<LongRange, Long> count = new HashMap<>();
+            int offset = 0;
+            int limit = 1024;
+            while (true) {
+                synchronized (analyzerLock) {
+                    TopGroups<LongRange> result = groupingSearch.search(
+                        this.searcher,
+                        parser.parse(query, field),
+                        offset,
+                        limit
+                    );
+                    if (result.groups.length == 0) break;
+                    offset += limit;
+                    for (GroupDocs<LongRange> group: result.groups) {
                         count.put(group.groupValue(), group.totalHits().value());
                     }
                 }

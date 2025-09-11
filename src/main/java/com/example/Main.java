@@ -21,6 +21,7 @@ import java.sql.Statement;
 import java.time.DayOfWeek;
 import java.time.Month;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.format.TextStyle;
@@ -50,10 +51,14 @@ import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.IndexNotFoundException;
 import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.queryparser.flexible.core.QueryNodeException;
+import org.apache.lucene.search.LongValuesSource;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.SortedNumericSortField;
 import org.apache.lucene.search.TopDocs;
+import org.apache.lucene.search.grouping.LongRange;
+import org.apache.lucene.search.grouping.LongRangeFactory;
+import org.apache.lucene.search.grouping.LongRangeGroupSelector;
 import org.apache.lucene.util.BytesRef;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -271,6 +276,8 @@ public class Main
             "/api/documents", Main::documents
         ).get(
             "/api/group/count", Main::groupCount
+        ).get(
+            "/api/group/count/timeline", Main::timelineCount
         ).post(
             "/api/export/sqlite", Main::exportSqlite  // TODO: キャンセル
         ).post(
@@ -362,6 +369,8 @@ public class Main
             this.put("settings", Settings.get());
             this.put("facility", Arrays.asList(Facility.values()).stream().map(item -> item.name()).toList());
             this.put("severity", Arrays.asList(Severity.values()).stream().map(item -> item.name()).toList());
+            // TODO: IndexNotFoundException
+            // TODO: org.apache.lucene.index.DocValues
             this.put("host", new ArrayList<>() {{
                 try (LuceneReader reader = lucene.getReader();) {
                     Map<BytesRef, Long> count = reader.groupCount(
@@ -482,9 +491,10 @@ public class Main
     private static void groupCount(Context ctx) throws ParseException, IOException, QueryNodeException {
         try (LuceneReader reader = lucene.getReader();) {
             String field = ctx.queryParam("field");
+            String query = ctx.queryParam("query");
             Map<BytesRef, Long> result = reader.groupCount(
                 LuceneFieldKeys.message.name(),
-                ctx.queryParam("query"),
+                query,
                 LuceneFieldKeys.getPointsConfig(getZoneOffset(ctx.cookieMap())),
                 field
             );
@@ -494,6 +504,85 @@ public class Main
                 }
             }};
             ctx.json(count);
+        } catch (IndexNotFoundException e) {
+            logger.atWarn().log("index not found.");
+        }
+    }
+
+    private static void timelineCount(Context ctx) throws ParseException, IOException, QueryNodeException {
+        try (LuceneReader reader = lucene.getReader();) {
+            String query = ctx.queryParam("query");
+            Long span = Long.valueOf(ctx.queryParam("span"));
+            ZoneOffset offset = getZoneOffset(ctx.cookieMap());
+            ZoneId zone = offset.normalized();
+
+            SearchResult hits = search(query, offset);
+
+            if (hits.ids.size() > 0) {
+                long first = LuceneFieldKeys.timestamp.get(reader.get(hits.ids.get(hits.ids.size() - 1)), Long.class);
+                long last = LuceneFieldKeys.timestamp.get(reader.get(hits.ids.get(0)), Long.class);
+
+                long min = OffsetDateTime
+                    .ofInstant(new Date(first).toInstant(), zone)
+                    .withHour(0)
+                    .withMinute(0)
+                    .withSecond(0)
+                    .withNano(0)
+                    .toInstant()
+                    .toEpochMilli();
+
+                long max = OffsetDateTime
+                    .ofInstant(new Date(last).toInstant(), zone)
+                    .plusDays(1)
+                    .withHour(0)
+                    .withMinute(0)
+                    .withSecond(0)
+                    .withNano(0)
+                    .toInstant()
+                    .toEpochMilli();
+
+                long width = span * 60 * 1000;
+
+                LongRangeGroupSelector selector = new LongRangeGroupSelector(
+                    LongValuesSource.fromLongField(LuceneFieldKeys.timestamp.name()),
+                    new LongRangeFactory(min, width, max)
+                );
+
+                // TODO: 2軸でgroupingする方法
+                Map<LongRange, Long> result = reader.groupCount(
+                    LuceneFieldKeys.message.name(),
+                    query,
+                    LuceneFieldKeys.getPointsConfig(offset),
+                    selector
+                );
+
+                DateTimeFormatter format = DateTimeFormatter.ofPattern(
+                    span >= 60 * 24
+                    ? "yyyy-MM-dd"
+                    : "yyyy-MM-dd HH:mm"
+                );
+
+                Function<Long, String> formatter = timestamp -> OffsetDateTime
+                    .ofInstant(new Date(timestamp).toInstant(), zone)
+                    .format(format);
+
+                Map<String, Long> count = new HashMap<>() {{
+                    long current = min;
+                    do {
+                        this.put(formatter.apply(current), 0l);
+                        current += width;
+                    } while (current < max);
+                }};
+
+                for (Entry<LongRange, Long> entry: result.entrySet()) {
+                    String hour = formatter.apply(entry.getKey().min);
+                    count.put(hour, entry.getValue());
+                }
+
+                ctx.json(count);
+            } else {
+                ctx.json(new HashMap<>());
+            }
         } catch (IndexNotFoundException e) {
             logger.atWarn().log("index not found.");
         }
