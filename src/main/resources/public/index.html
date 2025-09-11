@@ -203,7 +203,7 @@
               </Tabs>
             </SplitterPanel>
           </Splitter>
-          <Dialog v-model:visible="dialog.config.show" modal header="Config">
+          <Dialog v-model:visible="dialog.config.show" modal :dismissableMask="true" header="Config">
             <div style="display: flex; width: 1000px; justify-content: space-around;">
               <div>
                 <h3>Tree</h3>
@@ -235,7 +235,7 @@
               </div>
             </div>
           </Dialog>
-          <Dialog v-model:visible="dialog.download.show" modal header="Download">
+          <Dialog v-model:visible="dialog.download.show" modal :dismissableMask="true" header="Download">
             <DataTable :value="Object.values(jobs.list).filter(job => job.type == 'export').sort((a, b) => a.start < b.start ? -1 : a.start > b.start ? 1 : 0)">
               <Column field="start" header="Start" style="width: 180px;"></Column>
               <Column field="finish" header="Finish" style="width: 180px;"></Column>
@@ -265,7 +265,7 @@
               <Button label="TSV" icon="pi pi-file" @click="startExportJob('tsv')" severity="secondary" />
             </template>
           </Dialog>
-          <Dialog v-model:visible="dialog.upload.show" modal header="Upload">
+          <Dialog v-model:visible="dialog.upload.show" modal :dismissableMask="true" header="Upload">
             <DataTable :value="Object.values(jobs.list).filter(job => job.type == 'import').sort((a, b) => a.start < b.start ? -1 : a.start > b.start ? 1 : 0)">
               <Column field="start" header="Start" style="width: 180px;"></Column>
               <Column field="finish" header="Finish" style="width: 180px;"></Column>
