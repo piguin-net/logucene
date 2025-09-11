@@ -459,24 +459,30 @@
             });
           });
 
-          this.$data.jobs.socket = new WebSocket("/ws/job");
-          this.$data.jobs.socket.addEventListener("message", event => {
-            var message = JSON.parse(event.data);
-            if (message.event == 'remove') {
-              this.$data.jobs.list = Object.values(
-                this.$data.jobs.list
-              ).filter(
-                job => job.id != message.id
-              ).reduce(
-                (jobs, job) => {
-                  jobs[job.id] = job;
-                  return jobs;
-                }, {}
-              );
-            } else {
-              this.$data.jobs.list[message.id] = message;
-            }
-          });
+          var newWebSocket = () => {
+            this.$data.jobs.socket = new WebSocket("/ws/job");
+            this.$data.jobs.socket.addEventListener("close", event => {
+              setTimeout(() => newWebSocket(), 1000);
+            });
+            this.$data.jobs.socket.addEventListener("message", event => {
+              var message = JSON.parse(event.data);
+              if (message.event == 'remove') {
+                this.$data.jobs.list = Object.values(
+                  this.$data.jobs.list
+                ).filter(
+                  job => job.id != message.id
+                ).reduce(
+                  (jobs, job) => {
+                    jobs[job.id] = job;
+                    return jobs;
+                  }, {}
+                );
+              } else {
+                this.$data.jobs.list[message.id] = message;
+              }
+            });
+          };
+          newWebSocket();
 
           var config = PrimeVue.usePrimeVue().config;
           console.debug(config);
@@ -712,12 +718,18 @@
               leaf: true
             }];
             if (this.$data.realtime.enable) {
-              this.$data.realtime.socket = new WebSocket("/ws/realtime");
-              this.$data.realtime.socket.addEventListener("message", event => {
-                this.$data.table.logs = [JSON.parse(event.data)].concat(this.$data.table.logs);
-                this.$data.tree.value[0].data.count++;
-                this.showSummary(true);
-              });
+              var newWebSocket = () => {
+                this.$data.realtime.socket = new WebSocket("/ws/realtime");
+                this.$data.realtime.socket.addEventListener("close", event => {
+                  setTimeout(() => newWebSocket(), 1000);
+                });
+                this.$data.realtime.socket.addEventListener("message", event => {
+                  this.$data.table.logs = [JSON.parse(event.data)].concat(this.$data.table.logs);
+                  this.$data.tree.value[0].data.count++;
+                  this.showSummary(true);
+                });
+              };
+              newWebSocket();
             } else {
               this.$data.realtime.socket.close();
               this.$data.realtime.socket = null;
