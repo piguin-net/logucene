@@ -70,16 +70,16 @@ public class LuceneManager implements Closeable {
             return storedFields.document(id);
         }
 
-        public <T> Map<T, Long> groupCount(String field, String query, Map<String, PointsConfig> pointsConfig, String groupField) throws IOException, QueryNodeException {
+        public <BytesRef> Map<BytesRef, Long> groupCount(String field, String query, Map<String, PointsConfig> pointsConfig, String groupField) throws IOException, QueryNodeException {
             GroupingSearch groupingSearch = new GroupingSearch(groupField);
             StandardQueryParser parser = new StandardQueryParser(this.analyzer);
             parser.setPointsConfigMap(pointsConfig);
-            Map<T, Long> count = new HashMap<>();
+            Map<BytesRef, Long> count = new HashMap<>();
             int offset = 0;
             int limit = 1024;
             while (true) {
                 synchronized (analyzerLock) {
-                    TopGroups<T> result = groupingSearch.search(
+                    TopGroups<BytesRef> result = groupingSearch.search(
                         this.searcher,
                         parser.parse(query, field),
                         offset,
@@ -87,7 +87,7 @@ public class LuceneManager implements Closeable {
                     );
                     if (result.groups.length == 0) break;
                     offset += limit;
-                    for (GroupDocs<T> group: result.groups) {
+                    for (GroupDocs<BytesRef> group: result.groups) {
                         count.put(group.groupValue(), group.totalHits().value());
                     }
                 }

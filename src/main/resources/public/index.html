@@ -368,12 +368,11 @@
                 format: log => log.addr,
                 collect: data => [...new Set(data)].sort()
               },
-              // TODO: 数値はcount未対応
-              // 'port': {
-              //   query: value => `port:${value}`,
-              //   format: log => log.port,
-              //   collect: data => [...new Set(data)].sort()
-              // },
+              'port': {
+                query: value => `port:${value}`,
+                format: log => log.port,
+                collect: data => [...new Set(data)].sort()
+              },
               'facility': {
                 query: value => `facility:"${value}"`,
                 format: log => log.facility,
@@ -410,7 +409,7 @@
               ],[
                 'format',
                 'addr',
-                // 'port',  TODO: 数値はcount未対応
+                'port',
                 'facility',
               ]],
             }

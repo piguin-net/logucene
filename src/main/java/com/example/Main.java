@@ -13,6 +13,7 @@ import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
 import java.io.PrintWriter;
 import java.lang.reflect.InvocationTargetException;
+import java.nio.ByteBuffer;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -46,7 +47,9 @@ import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.tokenattributes.OffsetAttribute;
 import org.apache.lucene.document.Document;
+import org.apache.lucene.document.IntPoint;
 import org.apache.lucene.document.KeywordField;
+import org.apache.lucene.document.LongPoint;
 import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.IndexNotFoundException;
 import org.apache.lucene.queryparser.classic.ParseException;
@@ -493,17 +496,23 @@ public class Main
 
     private static void groupCount(Context ctx) throws ParseException, IOException, QueryNodeException {
         try (LuceneReader reader = lucene.getReader();) {
-            String field = ctx.queryParam("field");
+            LuceneFieldKeys field = LuceneFieldKeys.valueOf(ctx.queryParam("field"));
             String query = ctx.queryParam("query");
             Map<BytesRef, Long> result = reader.groupCount(
                 LuceneFieldKeys.message.name(),
                 query,
                 LuceneFieldKeys.getPointsConfig(getZoneOffset(ctx.cookieMap())),
-                field
+                field.name()
             );
-            Map<String, Long> count = new HashMap<>() {{
+            Map<Object, Long> count = new HashMap<>() {{
                 for (Entry<BytesRef, Long> entry: result.entrySet()) {
-                    this.put(entry.getKey().utf8ToString(), entry.getValue());
+                    if (IntPoint.class.equals(field.getFieldClass())) {
+                        this.put(ByteBuffer.wrap(entry.getKey().bytes).getInt(), entry.getValue());
+                    } else if (LongPoint.class.equals(field.getFieldClass())) {
+                        this.put(ByteBuffer.wrap(entry.getKey().bytes).getLong(), entry.getValue());
+                    } else {
+                        this.put(entry.getKey().utf8ToString(), entry.getValue());
+                    }
                 }
             }};
             ctx.json(count);
