@@ -136,7 +136,7 @@ public class SyslogReceiver implements Runnable {
             }};
         }
 
-        // TODO: 横展開、doc.getField(this.name()).xxxValue()の方が良い
+        // TODO: doc.getField(this.name()).xxxValue()の方が良い
         @SuppressWarnings("unchecked")
         public <T> T get(Document doc, Class<T> clazz) {
             Map<Class<?>, Supplier<T>> mapping = new HashMap<>() {{
@@ -284,7 +284,7 @@ public class SyslogReceiver implements Runnable {
     }
 
     public static Map<String, String> toMap(Document doc, ZoneOffset offset) {
-        long timestamp = Long.valueOf(doc.get(LuceneFieldKeys.timestamp.name()));
+        long timestamp = LuceneFieldKeys.timestamp.get(doc, Long.class);
         OffsetDateTime datetime = OffsetDateTime.ofInstant(new Date(timestamp).toInstant(), offset);
         return new HashMap<>() {{
             this.put("datetime", datetime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
@@ -325,11 +325,11 @@ public class SyslogReceiver implements Runnable {
                                 try {
                                     pb.stepTo(i + 1);
                                     Document doc = reader.get(hits.scoreDocs[i++].doc);
-                                    long timestamp = Long.valueOf(doc.get(LuceneFieldKeys.timestamp.name()));
+                                    long timestamp = LuceneFieldKeys.timestamp.get(doc, Long.class);
                                     return SyslogReceiver.parse(
                                         timestamp,
                                         doc.get(LuceneFieldKeys.addr.name()),
-                                        Integer.valueOf(doc.get(LuceneFieldKeys.port.name())),
+                                        LuceneFieldKeys.port.get(doc, Integer.class),
                                         doc.get(LuceneFieldKeys.raw.name())
                                     );
                                 } catch (Exception e) {
