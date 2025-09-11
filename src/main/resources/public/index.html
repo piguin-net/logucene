@@ -479,6 +479,21 @@
                 );
               } else {
                 this.$data.jobs.list[message.id] = message;
+                if (message.finish) {
+                  if (message.error) {
+                    this.$data.toast.add({
+                      severity: 'error',
+                      summary: `${message.type} job failed.`,
+                      detail: message.error
+                    });
+                  } else {
+                    this.$data.toast.add({
+                      severity: 'info',
+                      summary: `${message.type} job finished.`,
+                      life: 5000,
+                    });
+                  }
+                }
               }
             });
           };
