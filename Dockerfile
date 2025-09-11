@@ -1,5 +1,5 @@
 FROM openjdk:21
-ARG VERSION=1.2
+ARG VERSION=1.3
 
 WORKDIR /opt/logucene
 VOLUME ["/opt/logucene/index"]
