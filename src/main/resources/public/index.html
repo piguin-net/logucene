@@ -750,7 +750,9 @@
               var newWebSocket = () => {
                 this.$data.realtime.socket = new WebSocket("/ws/realtime");
                 this.$data.realtime.socket.addEventListener("close", event => {
+                  if (this.$data.realtime.enable) {
                   setTimeout(() => newWebSocket(), 1000);
+                  }
                 });
                 this.$data.realtime.socket.addEventListener("message", event => {
                   this.$data.table.logs = [JSON.parse(event.data)].concat(this.$data.table.logs);
