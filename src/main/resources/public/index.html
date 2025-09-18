@@ -25,7 +25,9 @@
         height: calc(100% - 58px);
       }
       .p-datatable-tbody > tr > td {
+        overflow: hidden;
         white-space: nowrap;
+        text-overflow: ellipsis;
       }
     </style>
   </head>
@@ -162,6 +164,8 @@
                       style="padding: 10px;"
                       size="small"
                       v-if="table.show"
+                      resizableColumns
+                      columnResizeMode="expand"
                     >
                       <Column
                         v-for="field in table.fields[0]"
