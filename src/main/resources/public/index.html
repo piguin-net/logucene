@@ -107,7 +107,7 @@
                 <label for="severity">Severity</label>
               </IftaLabel>
               <IftaLabel style="width: calc(100% - 950px);">
-                <InputText type="text" v-model="condition.query" inputId="query" :disabled="realtime.enable" style="width: 100%;" @keydown="$event.key == 'Enter' && changeSearchCondition()" />
+                <InputText type="text" v-model="condition.query" id="query" :disabled="realtime.enable" style="width: 100%;" @keydown="$event.key == 'Enter' && changeSearchCondition()" />
                 <label for="query">Query</label>
               </IftaLabel>
               <Button v-tooltip.bottom="'Search'" severity="success" icon="pi pi-search" :disabled="realtime.enable" @click="changeSearchCondition" />
@@ -257,8 +257,8 @@
               <Column header="Operation" style="width: 270px;">
                 <template #body="slotProps">
                   <div style="display: flex; gap: 0.5rem;">
-                    <Button label="Download" icon="pi pi-download" severity="info" :disabled="!slotProps.data.finish || slotProps.data.error" @click="download(slotProps.data.id)" severity="secondary" />
-                    <Button label="Remove" icon="pi pi-trash" severity="danger" :disabled="!slotProps.data.finish" @click="removeJob(slotProps.data.id)" severity="secondary" />
+                    <Button label="Download" icon="pi pi-download" severity="info" :disabled="!slotProps.data.finish || slotProps.data.error" @click="download(slotProps.data.id)" />
+                    <Button label="Remove" icon="pi pi-trash" severity="danger" :disabled="!slotProps.data.finish" @click="removeJob(slotProps.data.id)" />
                   </div>
                 </template>
               </Column>
@@ -287,8 +287,8 @@
               <Column header="Operation" style="width: 270px;">
                 <template #body="slotProps">
                   <div style="display: flex; gap: 0.5rem;">
-                    <Button label="Download" icon="pi pi-download" severity="info" :disabled="!slotProps.data.finish || slotProps.data.error" @click="download(slotProps.data.id)" severity="secondary" />
-                    <Button label="Remove" icon="pi pi-trash" severity="danger" :disabled="!slotProps.data.finish" @click="removeJob(slotProps.data.id)" severity="secondary" />
+                    <Button label="Download" icon="pi pi-download" severity="info" :disabled="!slotProps.data.finish || slotProps.data.error" @click="download(slotProps.data.id)" />
+                    <Button label="Remove" icon="pi pi-trash" severity="danger" :disabled="!slotProps.data.finish" @click="removeJob(slotProps.data.id)" />
                   </div>
                 </template>
               </Column>
@@ -755,7 +755,7 @@
                 this.$data.realtime.socket = new WebSocket("/ws/realtime");
                 this.$data.realtime.socket.addEventListener("close", event => {
                   if (this.$data.realtime.enable) {
-                  setTimeout(() => newWebSocket(), 1000);
+                    setTimeout(() => newWebSocket(), 1000);
                   }
                 });
                 this.$data.realtime.socket.addEventListener("message", event => {
