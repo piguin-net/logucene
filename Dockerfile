@@ -1,4 +1,4 @@
-FROM openjdk:21
+FROM docker.io/library/openjdk:21
 ARG VERSION=1.3
 
 WORKDIR /opt/logucene

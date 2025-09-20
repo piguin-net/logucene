@@ -41,7 +41,7 @@ sudo docker run -it -d \
 Podmanのイメージを作成して試す
 ```
 mkdir index
-podman run --rm -v $PWD:/workdir --workdir /workdir maven mvn -s settings.xml package
+podman run --rm -v $PWD:/workdir --workdir /workdir docker.io/library/maven mvn -s settings.xml package
 sudo podman build -t logucene .
 sudo podman run -it -d \
   --name logucene \
