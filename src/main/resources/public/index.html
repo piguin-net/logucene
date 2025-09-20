@@ -197,7 +197,7 @@
                         <label for="timeline-yaxis">Y-Axis</label>
                       </IftaLabel>
                       <IftaLabel style="width: 50%;">
-                        <Select style="width: 100%;" v-model="timeline.xaxis" inputId="timeline-xaxis" @change="changeTimelineAxis" />
+                        <Select style="width: 100%;" v-model="timeline.xaxis" inputId="timeline-xaxis" :options="Object.keys(axis)" @change="changeTimelineAxis" />
                         <label for="timeline-xaxis">X-Axis</label>
                       </IftaLabel>
                     </div>
@@ -504,10 +504,10 @@
           var config = PrimeVue.usePrimeVue().config;
           console.debug(config);
 
+          Promise.all([
           this.$data.http.get(
             '/api/config'
           ).then(response => {
-            this.$data.config.host        = response.data.host;
             this.$data.config.facility    = response.data.facility;
             this.$data.config.severity    = response.data.severity;
             this.$data.config.day.min     = new Date(response.data.day.min);
@@ -519,9 +519,14 @@
             config.locale.monthNames      = response.data.monthNames;
             config.locale.monthNamesShort = response.data.monthNamesShort;
             console.debug(config);
-          }).then(
-            () => this.search()
-          ).catch(e => {
+            }),
+            this.$data.http.get(
+              '/api/field/host/values'
+            ).then(response => {
+              this.$data.config.host = response.data;
+            }),
+            this.search()
+          ]).catch(e => {
             this.$data.toast.add({
               severity: 'error',
               summary: e,
@@ -608,7 +613,7 @@
             this.$data.condition.query = '*:*';
             this.$data.tree.selected = null;
             this.$data.tree.selectedKeys = [];
-            this.search();
+            this.tabSwitch();
           },
           getQuery: function(node, query) {
             query = `(${query || this.$data.condition.query?.trim() || '*:*'})`;
@@ -916,8 +921,9 @@
                 this.$data.timeline.instance = null;
               }
               var query = encodeURIComponent(this.getQuery());
-              this.timelineCount(
-                query
+              var field = this.$data.timeline.xaxis;
+              this.$data.http.get(
+                `/api/field/${field}/values`
               ).then(response => {
                 var timeline = this.$data.timeline.instance || echarts.init(this.$refs.timeline);
                 if (!this.$data.timeline.instance) {
@@ -925,14 +931,27 @@
                   timeline.on('dblclick', (event) => {
                     console.log(event);
                     if (!this.$data.realtime.enable) {
-                      this.$data.condition.query = `(${this.$data.condition.query?.trim() || '*:*'}) `
-                        + `AND timestamp:["${event.data.min}" TO "${event.data.max}"]`;
+                      this.$data.condition.query = `(${this.$data.condition.query?.trim() || '*:*'})`
+                        + ` AND timestamp:["${event.data.min}" TO "${event.data.max}"]`
+                        + ` AND ${field}:"${event.seriesName}"`;
                       this.search();
                       this.$data.tab = 'table';
                     }
                   });
                 }
-                var xaxis = Object.keys(response.data).sort().reverse();
+                var xaxis = response.data;
+                Promise.all(xaxis.map(
+                  value => this.timelineCount(`${query} AND ${field}:"${value}"`)
+                )).then(responses => {
+                  var count = {};
+                  for (var i = 0; i < xaxis.length; i++) {
+                    for (var day of Object.keys(responses[i].data).sort().reverse()) {
+                      if (!(day in count)) count[day] = {};
+                      count[day][xaxis[i]] = responses[i].data[day];
+                    }
+                  }
+                  return {count, xaxis, yaxis: Object.keys(count).sort().reverse()};
+                }).then(result => {
                 var option = {
                   tooltip: {
                     trigger: 'axis',
@@ -946,18 +965,19 @@
                   },
                   yAxis: {
                     type: 'category',
-                    data: xaxis
+                      data: result.yaxis
                   },
-                  series: {
+                    series: result.xaxis.map(x => {
+                      return  {
+                        name: x,
                     type: 'bar',
-                    data: xaxis.map(key => {
-                      return {
-                        value: response.data[key].count,
-                        min: response.data[key].min,
-                        max: response.data[key].max,
+                        stack: 'total',
+                        emphasis: {
+                          focus: 'series'
+                        },
+                        data: result.yaxis.map(y => result.count[y][x])
                       };
-                    })
-                  },
+                    }),
                   dataZoom: [
                     {
                       type: 'inside',
@@ -976,6 +996,7 @@
                   ]
                 };
                 timeline.setOption(option);
+                });
               }).catch(e => {
                 this.$data.toast.add({
                   severity: 'error',

@@ -278,6 +278,8 @@ public class Main
         ).get(
             "/api/documents", Main::documents
         ).get(
+            "/api/field/{field}/values", Main::fieldValues
+        ).get(
             "/api/group/count", Main::groupCount
         ).get(
             "/api/group/count/timeline", Main::timelineCount
@@ -372,17 +374,6 @@ public class Main
             this.put("settings", Settings.get());
             this.put("facility", Arrays.asList(Facility.values()).stream().map(item -> item.name()).toList());
             this.put("severity", Arrays.asList(Severity.values()).stream().map(item -> item.name()).toList());
-            this.put("host", new ArrayList<>() {{
-                try (LuceneReader reader = lucene.getReader();) {
-                    reader.getSortedDocValues(LuceneFieldKeys.host.name())
-                        .stream()
-                        .map(value -> new String(value.array()))
-                        .sorted()
-                        .forEach(host -> this.add(host));
-                } catch (IndexNotFoundException e) {
-                    logger.warn(e.getMessage(), e);
-                }
-            }});
             this.put("day", new HashMap<>() {{
                 try (LuceneReader reader = lucene.getReader();) {
                     TopDocs hits = reader.search(
@@ -491,6 +482,20 @@ public class Main
         }
     }
 
+    private static void fieldValues(Context ctx) throws IOException {
+        ctx.json(new ArrayList<>() {{
+            try (LuceneReader reader = lucene.getReader();) {
+                reader.getSortedDocValues(ctx.pathParam("field"))
+                    .stream()
+                    .map(value -> new String(value.array()))
+                    .sorted()
+                    .forEach(host -> this.add(host));
+            } catch (IndexNotFoundException e) {
+                logger.warn(e.getMessage(), e);
+            }
+        }});
+    }
+
     private static void groupCount(Context ctx) throws ParseException, IOException, QueryNodeException {
         try (LuceneReader reader = lucene.getReader();) {
             LuceneFieldKeys field = LuceneFieldKeys.valueOf(ctx.queryParam("field"));
@@ -585,7 +590,7 @@ public class Main
                         Map<String, Object> value = new HashMap<>();
                         value.put("min",   minmaxFormatter.apply(current));
                         value.put("max",   minmaxFormatter.apply(current + width - 1));
-                        value.put("count", 0l);
+                        value.put("value", 0l);
                         this.put(formatter.apply(current), value);
                         current += width;
                     } while (current < max);
@@ -595,7 +600,7 @@ public class Main
                     count.put(formatter.apply(entry.getKey().min), new HashMap<>() {{
                         this.put("min",   minmaxFormatter.apply(entry.getKey().min));
                         this.put("max",   minmaxFormatter.apply(entry.getKey().max - 1));
-                        this.put("count", entry.getValue());
+                        this.put("value", entry.getValue());
                     }});
                 }
 
