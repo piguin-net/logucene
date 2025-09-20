@@ -3,6 +3,7 @@ package com.example;
 import java.io.Closeable;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
+import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -125,7 +126,7 @@ public class LuceneManager implements Closeable {
             return count;
         }
 
-        public Set<byte[]> getSortedDocValues(String field) throws IOException {
+        public Set<ByteBuffer> getSortedDocValues(String field) throws IOException {
             return new HashSet<>() {{
                 for (LeafReaderContext context: reader.leaves()) {
                     // SortedDocValues values = context.reader().getSortedDocValues(field);
@@ -134,7 +135,7 @@ public class LuceneManager implements Closeable {
                         byte[] src = values.lookupOrd(i).bytes;
                         byte[] dst = new byte[values.lookupOrd(i).length];
                         for (int j = 0; j < dst.length; j++) dst[j] = src[j];
-                        this.add(dst);
+                        this.add(ByteBuffer.wrap(dst));
                     }
                 }
             }};

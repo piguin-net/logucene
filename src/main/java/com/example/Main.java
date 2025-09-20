@@ -376,7 +376,7 @@ public class Main
                 try (LuceneReader reader = lucene.getReader();) {
                     reader.getSortedDocValues(LuceneFieldKeys.host.name())
                         .stream()
-                        .map(value -> new String(value))
+                        .map(value -> new String(value.array()))
                         .sorted()
                         .forEach(host -> this.add(host));
                 } catch (IndexNotFoundException e) {
